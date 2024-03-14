@@ -1,0 +1,266 @@
+Program.Sub.ScreenSU.Start
+Gui.f_Print..Create
+Gui.f_Print..Caption("Report 1811 Print Options")
+Gui.f_Print..Size(4860,2850)
+Gui.f_Print..MinX(0)
+Gui.f_Print..MinY(0)
+Gui.f_Print..Position(0,0)
+Gui.f_Print..BackColor(-2147483633)
+Gui.f_Print..MaxButton(False)
+Gui.f_Print..MousePointer(0)
+Gui.f_Print..Sizeable(False)
+Gui.f_Print..ControlBox(False)
+Gui.f_Print.lbl1.Create(Label,"Select printing mode:",True,1935,255,0,315,360,True,0,"Arial",8,-2147483633,0)
+Gui.f_Print.chkStdReport.Create(CheckBox)
+Gui.f_Print.chkStdReport.Size(3945,360)
+Gui.f_Print.chkStdReport.Position(375,660)
+Gui.f_Print.chkStdReport.Caption("Print standard bar code work order report")
+Gui.f_Print.chkReorderSeqs.Create(CheckBox)
+Gui.f_Print.chkReorderSeqs.Size(3885,360)
+Gui.f_Print.chkReorderSeqs.Position(390,1140)
+Gui.f_Print.chkReorderSeqs.Caption("Print bar code work order with reordered seq's")
+Gui.f_Print.cmdSubmit.Create(Button)
+Gui.f_Print.cmdSubmit.Size(855,375)
+Gui.f_Print.cmdSubmit.Position(1890,1695)
+Gui.f_Print.cmdSubmit.Caption("Submit")
+Gui.f_Print.cmdSubmit.Event(Click,cmdSubmit_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	Program.External.Include.Library("GCG_5708_GET_MATL_SEQ.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	f.Intrinsic.Control.Try
+		'When 16090 fires, check if report 1811 (Bar Code Work Order Ext) is what is called.  If so, reorder the data in V_BI_BAR_HEAD and V_BI_BAR_DETAIL to show the sequences in order based on material linking, if the option is enabled.
+		
+		f.Intrinsic.Control.If(v.Caller.Hook,=,16090)
+			f.Intrinsic.Control.If(v.Passed.BIP_reportid,=,"001811")				
+				'Get printing options
+				f.Intrinsic.Control.CallSub(GetPrintingOptions)
+				
+				'Prompt user for printing options
+				gui.f_Print..Show
+				gui.f_Print..WaitForDismiss
+				
+				'Print the standard report from BI table
+				f.Intrinsic.Control.If(v.Screen.f_Print!chkStdReport.Value,=,1)
+					f.Intrinsic.Control.CallSub(PrintReport)
+				f.Intrinsic.Control.EndIf
+				
+				'Print the report with seqeunces reordered
+				f.Intrinsic.Control.If(v.Screen.f_Print!chkReorderSeqs.Value,=,1)
+					f.Intrinsic.Control.CallSub(Processing)
+				f.Intrinsic.Control.Else
+					'Override printing
+					v.Passed.CANCEL.Set(1)
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+		
+		f.Intrinsic.Control.End
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.GetPrintingOptions.Start
+	f.Intrinsic.Control.Try
+		v.Local.sRet.Declare(string)
+		
+		'Get the set report printing options for this project
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select b_val from gcg_5708_bom_rtr where id in (3,5) order by id;",v.Local.sRet)
+			f.Intrinsic.String.Split(v.Local.sRet,"#$#",v.Local.sRet)
+			
+			'Barcoded work order option
+			f.Intrinsic.Control.If(v.Local.sRet(0),=,"True")
+				gui.f_Print.chkStdReport.Value(True)
+			f.Intrinsic.Control.EndIf
+			'Reordered sequences option
+			f.Intrinsic.Control.If(v.Local.sRet(1),=,"True")
+				gui.f_Print.chkReorderSeqs.Value(True)
+			f.Intrinsic.Control.EndIf
+		f.ODBC.Connection!con.close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.GetPrintingOptions.End
+
+Program.Sub.PrintReport.Start
+	f.Intrinsic.Control.Try
+		v.Local.sParams.Declare(string)
+		v.Local.sValues.Declare(string)
+		
+		v.Local.sParams.Set("TERMINAL*!*MATLBAR*!*OUTBAR*!*FGBAR*!*PROGRAM*!*REPORTID")
+		F.Intrinsic.String.Build("{0}*!**!**!**!**!*001811",v.Caller.Terminal,V.Local.sValues)
+		f.Intrinsic.String.Split(v.Local.sParams,"*!*",v.Local.sParams)
+		f.Intrinsic.String.Split(v.Local.sValues,"*!*",v.Local.sValues)
+		f.Global.BI.PrintReport(1811,16,v.Local.sParams,v.Local.sValues,"",True)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.PrintReport.End
+
+Program.Sub.Processing.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		v.Local.bChecked.Declare(boolean)
+		v.Local.iCnt.Declare(long)
+		v.Local.iRank.Declare(long)
+		v.Local.sRank.Declare(string)
+		v.Local.sFieldStored.Declare(string)
+		v.Local.sLinkedField.Declare(string)
+		v.Local.iret.Declare(long)
+		v.Local.sJob.Declare(string)
+		v.Local.sSuffix.Declare(string)
+		v.Local.fStartRank.Declare(float)
+		v.Local.iCnt2.Declare(long)
+		v.Local.iCnt3.Declare(long)
+		v.Local.iCnt4.Declare(long)
+		v.Local.sRet.Declare(string)
+		v.Local.sSeq.Declare(string)
+		v.Local.sRouterSeq.Declare(string)
+		v.Local.sBCSeq.Declare(string)
+		v.Local.bCommentsFound.Declare(string)
+		v.local.sRet2.Declare(string)
+		
+		'Check if option is enabled
+		f.ODBC.Connection!con.opencompanyconnection
+		
+		f.ODBC.Connection!con.executeandreturn("select b_val from GCG_5708_BOM_RTR where id='3';",v.Local.bChecked)	
+		
+		'If option is enabled, get list of work orders being printed by the terminal number
+		f.Intrinsic.Control.If(v.Local.bChecked)
+			f.Intrinsic.String.Build("select distinct job, suffix from bi_bar_head where terminal='{0}' and rptid='001811';",v.Caller.Terminal,v.Local.sSQL)
+			f.Data.DataTable.CreateFromSQL("dtWOHeader","con",v.Local.sSQL)
+			
+			'For each work order, get the BI sequences, get the ideal order of sequences, then update BI_BAR_DETAIL.
+			f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtWOHeader.RowCount--,1)
+				'Reset variables
+				v.Local.iCnt2.Set(0)
+				v.Local.iCnt2.Set(0)
+				'Get all bar details for the job, suffix
+				f.Intrinsic.String.Build("select * from bi_bar_detail where job='{0}' and suffix='{1}' and terminal='{2}' order by key_seq;",v.DataTable.dtWOHeader(v.Local.iCnt).Job!FieldVal,v.DataTable.dtWOHeader(v.Local.iCnt).Suffix!FieldVal,v.Caller.Terminal,v.Local.sSQL)
+				f.Data.DataTable.CreateFromSQL("dtWODetail", "con", v.Local.sSQL)
+				f.Intrinsic.UI.InvokeWaitDialog("Resequencing work order for material-labor linking...","5708-Barcode WO Print")
+				
+				'1.	Add expression column combining key_seq and bc_seq
+				f.Data.DataTable.AddExpressionColumn("dtWODetail","KeyField","string","Key_Seq+BC_Seq")
+				'2.	Add column for new key seq
+				f.Data.DataTable.AddColumn("dtWODetail","NewKeySeq","string")
+				'4.	Iterate through the sequences until a labor sequence is found.  Add each non-M sequence to dtSequence.
+				f.Intrinsic.Control.For(v.Local.iCnt2,0,v.DataTable.dtWODetail.RowCount--,1)
+					'5.	As long as the sequence has not been updated with a new key, when a labor sequence is encountered, look up the material sequences and add them before adding the labor sequence.
+					f.Intrinsic.Control.If(v.DataTable.dtWODetail(v.Local.iCnt2).NewKeySeq!FieldVal,=,"")
+						f.Intrinsic.String.Replace(v.DataTable.dtWODetail(v.Local.iCnt2).BC_Seq!FieldVal,"*","",v.Local.sSeq)
+						f.Intrinsic.String.Replace(v.DataTable.dtWODetail(v.Local.iCnt2).Router_Seq!FieldVal,"*","",v.Local.sRouterSeq)
+						f.Intrinsic.Control.If(v.DataTable.dtWODetail(v.Local.iCnt2).LMO!FieldValTrim,=,"L")
+							f.Intrinsic.Control.If(v.Local.sSeq.Long,<,995000)
+								f.Intrinsic.Control.CallSub("GCG_5708_GET_MATL_SEQ","Job",v.DataTable.dtWOHeader(v.Local.iCnt).Job!FieldVal,"Suffix",v.DataTable.dtWOHeader(v.Local.iCnt).Suffix!FieldVal,"Sequence",v.Local.sSeq)
+								
+								f.Intrinsic.Control.If(v.DataTable.GetMatlSeq.RowCount,>,0)
+									f.Intrinsic.Control.For(v.Local.iCnt3,0,v.DataTable.GetMatlSeq.RowCount--,1)
+
+										'For each part, find its row in the DT
+										f.Intrinsic.String.Build("PWC_PART='{0}'",v.DataTable.GetMatlSeq(v.Local.iCnt3).Part!FieldVal,v.Local.sSQL)
+										v.Local.sRet.Redim(0,0)
+										f.Data.DataTable.Select("dtWODetail",v.Local.sSQL,v.Local.sRet)
+										'If the part is not found, that probably means it was added to the BOM after the current work order was created.
+										f.Intrinsic.Control.If(v.Local.sRet,!=,"***NORETURN***")
+											f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+											f.Intrinsic.Math.Add(v.Local.iRank,1,v.Local.iRank)
+											f.Intrinsic.String.LPad(v.Local.iRank,"0",9,v.Local.sRank)
+											f.Data.DataTable.SetValue("dtWODetail",v.Local.sRet(0),"NewKeySeq",v.Local.sRank)
+											
+											'Check if there are any comments attached to the material sequence.  These comment sequences increase the router_seq by one even though the bc_seq stays the same
+											f.Intrinsic.String.Build("NewKeySeq='' and bc_seq='{0}' and LMO<>'M'",v.DataTable.dtWODetail(v.Local.sRet(0)).BC_Seq!FieldVal,v.Local.sSQL)
+											f.Data.DataTable.Select("dtWODetail",v.Local.sSQL,v.Local.sRet2)
+											f.Intrinsic.Control.If(v.Local.sRet2,!=,"***NORETURN***")
+												v.Local.iCnt4.Set(0)
+												f.Intrinsic.String.Split(v.Local.sRet2,"*!*",v.Local.sRet2)
+												f.Intrinsic.Control.For(v.Local.iCnt4,0,v.Local.sRet2.UBound,1)
+													f.Intrinsic.Math.Add(v.Local.iRank,1,v.Local.iRank)
+													f.Intrinsic.String.LPad(v.Local.iRank,"0",9,v.Local.sRank)
+													f.Data.DataTable.SetValue("dtWODetail",v.Local.sRet2(v.Local.iCnt4),"NewKeySeq",v.Local.sRank)
+												f.Intrinsic.Control.Next(v.Local.iCnt4)
+											f.Intrinsic.Control.EndIf
+										f.Intrinsic.Control.EndIf
+									f.Intrinsic.Control.Next(v.Local.iCnt3)								
+								f.Intrinsic.Control.EndIf
+							f.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf
+						
+						f.Intrinsic.Control.If(v.DataTable.dtWODetail(v.Local.iCnt2).LMO!FieldValTrim,!=,"M","AND",v.Local.sRouterSeq.long,<,995000)
+							'Update the sequence
+							f.Intrinsic.Math.Add(v.Local.iRank,1,v.Local.iRank)
+							f.Intrinsic.String.LPad(v.Local.iRank,"0",9,v.Local.sRank)
+							f.Data.DataTable.SetValue("dtWODetail",v.Local.icnt2,"NewKeySeq",v.Local.sRank)
+							
+							'Check if there are any comments attached to the labor sequence.  These comment sequences increase the router_seq by one even though the bc_seq stays the same
+							f.Intrinsic.String.Build("NewKeySeq='' and bc_seq='{0}' and LMO<>'L'",v.DataTable.dtWODetail(v.Local.icnt2).BC_Seq!FieldVal,v.Local.sSQL)
+							v.Local.sRet2.Redim(0,0)
+							f.Data.DataTable.Select("dtWODetail",v.Local.sSQL,v.Local.sRet2)
+							f.Intrinsic.Control.If(v.Local.sRet2,!=,"***NORETURN***")
+								v.Local.iCnt4.Set(0)
+								f.Intrinsic.String.Split(v.Local.sRet2,"*!*",v.Local.sRet2)
+								f.Intrinsic.Control.For(v.Local.iCnt4,0,v.Local.sRet2.UBound,1)
+									f.Intrinsic.Math.Add(v.Local.iRank,1,v.Local.iRank)
+									f.Intrinsic.String.LPad(v.Local.iRank,"0",9,v.Local.sRank)
+									f.Data.DataTable.SetValue("dtWODetail",v.Local.sRet2(v.Local.iCnt4),"NewKeySeq",v.Local.sRank)
+								f.Intrinsic.Control.Next(v.Local.iCnt4)
+							f.Intrinsic.Control.EndIf
+						f.Intrinsic.Control.EndIf
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.Next(v.Local.iCnt2)
+				
+				'6.	For any material sequences that aren't linked to anything, put them last
+				v.Local.iCnt2.Set(0)
+				f.Intrinsic.Control.For(v.Local.iCnt2,0,v.datatable.dtWODetail.RowCount--,1)
+					f.Intrinsic.Control.If(v.datatable.dtWODetail(v.Local.icnt2).NewKeySeq!FieldValTrim,=,"")
+						f.Intrinsic.Math.Add(v.Local.iRank,1,v.Local.iRank)
+						f.Intrinsic.String.LPad(v.Local.iRank,"0",9,v.Local.sRank)
+						f.Data.DataTable.SetValue("dtWODetail",v.Local.iCnt2,"NewKeySeq",v.Local.sRank)
+					f.Intrinsic.Control.EndIf
+				f.Intrinsic.Control.Next(v.Local.iCnt2)
+				
+				'Update every record's key_seq from NewKeySeq, delete the OldKeySeq and NewKeySeq columns, delete all records from BI_BAR_DETAIL, then add as new records.
+				v.Local.iCnt2.Set(0)
+				f.Intrinsic.String.Build("delete from bi_bar_detail where terminal='{2}' and job='{0}' and suffix='{1}';",v.DataTable.dtWOHeader(v.Local.iCnt).Job!FieldVal,v.DataTable.dtWOHeader(v.Local.iCnt).Suffix!FieldVal,v.Caller.Terminal,v.Local.sSQL)
+				f.ODBC.Connection!con.execute(v.Local.sSQL)
+				v.Local.iCnt2.Set(0)
+
+				F.Data.DataTable.SaveToDB("dtWODetail","Con","bi_bar_detail","",128,"terminal@!@terminal*!*rptid@!@rptid*!*job@!@job*!*suffix@!@suffix*!*copy_no@!@copy_no*!*newkeyseq@!@key_seq*!*router_seq@!@router_seq*!*lmo@!@lmo*!*bc_seq@!@bc_seq*!*bc_pwc@!@bc_pwc*!*start_date@!@start_date*!*due_date@!@due_date*!*pwc@!@pwc*!*extra_desc@!@extra_desc*!*um@!@um*!*setup@!@setup*!*runtime@!@runtime*!*labor_total@!@labor_total*!*unit@!@unit*!*matl_total@!@matl_total*!*mach@!@mach*!*committed_units@!@committed_units*!*committed_dollars@!@committed_dollars*!*burden@!@burden*!*act_hrs@!@act_hrs*!*est_dlrs@!@est_dlrs*!*act_dlrs@!@act_dlrs*!*wc_factor@!@wc_factor*!*proj_group@!@proj_group*!*oper_sort_code@!@oper_sort_code*!*crew_size@!@crew_size*!*frequent@!@frequent*!*prev_clsd@!@prev_clsd*!*main_comment@!@main_comment*!*lead_time@!@lead_time*!*minimum_flag@!@minimum_flag*!*minimum@!@minimum*!*tooling_seq@!@tooling_seq*!*hold_PO@!@hold_po*!*wc_name@!@wc_name*!*partno@!@partno*!*rec_type@!@rec_type*!*wo_user_fld@!@wo_user_fld*!*serial_number@!@serial_number*!*pwc_part@!@pwc_part*!*filler50@!@filler50")
+				
+				'Cleanup for next loop
+				f.Data.DataTable.Close("dtWODetail")
+			f.Intrinsic.Control.Next(v.Local.iCnt)
+		f.Intrinsic.Control.EndIf
+		f.ODBC.Connection!con.close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.Finally
+		f.Intrinsic.UI.CloseWaitDialog
+	f.Intrinsic.Control.EndTry
+Program.Sub.Processing.End
+
+Program.Sub.ErrorMsg.Start
+v.Local.sError.Declare
+
+'Closes ODBC connection, default to connection : "con"
+f.Intrinsic.Control.If(v.ODBC!con.State, =, 1)
+	f.ODBC.Connection!con.Close
+f.Intrinsic.Control.EndIf
+
+'Generic Error message.
+f.Intrinsic.String.Build("Project GCG_5708_BARCODEWORPT.g2u {0}{0}Subroutine: {1}{0}Error: {2} with Description: {3}", v.Ambient.NewLine, v.Args.CurrentSub, v.Ambient.ErrorNumber, v.Ambient.ErrorDescription, v.Local.sError)
+f.Intrinsic.UI.Msgbox(v.Local.sError)
+Program.Sub.ErrorMsg.End
+
+Program.Sub.cmdSubmit_Click.Start
+	f.Intrinsic.Control.Try
+		gui.f_Print..Visible(False)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.cmdSubmit_Click.End
