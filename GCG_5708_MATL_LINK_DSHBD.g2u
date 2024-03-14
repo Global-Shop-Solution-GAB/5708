@@ -1,0 +1,566 @@
+Program.Sub.ScreenSU.Start
+Gui.f_MatlLinkingDshbd..Create
+Gui.f_MatlLinkingDshbd..Caption("Material Linking Dashboard")
+Gui.f_MatlLinkingDshbd..Size(15360,10695)
+Gui.f_MatlLinkingDshbd..MinX(0)
+Gui.f_MatlLinkingDshbd..MinY(0)
+Gui.f_MatlLinkingDshbd..Position(0,0)
+Gui.f_MatlLinkingDshbd..BackColor(-2147483633)
+Gui.f_MatlLinkingDshbd..MousePointer(0)
+Gui.f_MatlLinkingDshbd..Event(UnLoad,f_MatlLinkingDshbd_UnLoad)
+Gui.f_MatlLinkingDshbd.GsGcDisplay.Create(GsGridControl)
+Gui.f_MatlLinkingDshbd.GsGcDisplay.Size(15165,9540)
+Gui.f_MatlLinkingDshbd.GsGcDisplay.Position(60,630)
+Gui.f_MatlLinkingDshbd.GsGcDisplay.Anchor(15)
+Gui.f_MatlLinkingDshbd.GsGcDisplay.Event(CellValueChanged,GsGcDisplay_CellValueChanged)
+Gui.f_MatlLinkingDshbd.txtStart.Create(TextBox,"",True,2430,300,0,720,180,True,0,"Arial",8,-2147483643,1)
+Gui.f_MatlLinkingDshbd.txtEnd.Create(TextBox,"",False,1710,300,0,5175,180,True,0,"Arial",8,-2147483643,1)
+Gui.f_MatlLinkingDshbd.lbl1.Create(Label,"BOM:",True,540,255,0,60,270,True,0,"Arial",8,-2147483633,0)
+Gui.f_MatlLinkingDshbd.lbl2.Create(Label,"Ending BOM:",False,1290,255,0,3840,270,True,0,"Arial",8,-2147483633,0)
+Gui.f_MatlLinkingDshbd.cmdStart.Create(Button)
+Gui.f_MatlLinkingDshbd.cmdStart.Size(390,375)
+Gui.f_MatlLinkingDshbd.cmdStart.Position(3210,150)
+Gui.f_MatlLinkingDshbd.cmdStart.Caption("^")
+Gui.f_MatlLinkingDshbd.cmdStart.Event(Click,cmdStart_Click)
+Gui.f_MatlLinkingDshbd.cmdEnd.Create(Button)
+Gui.f_MatlLinkingDshbd.cmdEnd.Size(390,375)
+Gui.f_MatlLinkingDshbd.cmdEnd.Position(6945,150)
+Gui.f_MatlLinkingDshbd.cmdEnd.Caption("^")
+Gui.f_MatlLinkingDshbd.cmdEnd.Event(Click,cmdEnd_Click)
+Gui.f_MatlLinkingDshbd.cmdEnd.Visible(False)
+Gui.f_MatlLinkingDshbd.cmdRefresh.Create(Button)
+Gui.f_MatlLinkingDshbd.cmdRefresh.Size(450,375)
+Gui.f_MatlLinkingDshbd.cmdRefresh.Position(3720,150)
+Gui.f_MatlLinkingDshbd.cmdRefresh.Caption("REFRESH")
+Gui.f_MatlLinkingDshbd.cmdRefresh.Event(Click,cmdRefresh_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	v.Global.bLoaded.Declare(boolean)
+	v.Global.sXrefFieldToStore.Declare(string)
+	v.Global.sRouterLinkField.declare(string)
+	V.Global.sXrefValue.Declare(string)
+	V.Global.sXrefRouterField.Declare(string)
+	V.Global.sXrefFieldCaption.Declare(string)
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	'Author: Daniel Duncan
+	'Customer: Electro-Mechanical Corporation
+	'Program Name: Material Linking Dashboard
+	'Date Started: 11/6/2019
+	'Description: This dashboard allows the user to view each BOM and see its components and subcomponents from its phantoms, and what router labor sequences they are linked to.  The user can add the op code, workcenter, or router sequence as the linked field on the BOM sequence.  After this value is changed, the linked seqeunce will be returned and added to the dashboard.  The category can be modified as well for the BOM sequence.
+	'Quote: 
+	'GAP: 5708
+	v.Local.sIcon.Declare
+	
+	'Set logos
+	F.Intrinsic.String.Build("{0}\ART\gss2.ico",V.Caller.GlobalDir,v.Local.sIcon)
+	gui.f_MatlLinkingDshbd..Icon(V.Local.sIcon)
+	
+	F.Intrinsic.UI.SetBrowserHotTypeAhead(True)
+	
+	'Get the value stored in the field in custom options for this project
+	f.Intrinsic.Control.CallSub(GetBOMLinkedField)
+	
+	gui.f_MatlLinkingDshbd..Show
+	
+	F.Intrinsic.Control.CallSub(Deserialize)
+Program.Sub.Main.End
+
+Program.Sub.cmdStart_Click.Start
+	f.Intrinsic.Control.Try
+		v.Local.sRet.Declare(string)
+		
+		'Browse list of routers
+		f.Intrinsic.UI.Browser(2705,"",v.Local.sRet)
+		f.Intrinsic.Control.If(v.Local.sRet,!=,"***CANCEL***")
+			f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+			f.Intrinsic.String.rtrim(v.Local.sRet(0),v.local.sRet(0))
+			gui.f_MatlLinkingDshbd.txtStart.Text(v.Local.sRet(0))
+			f.Intrinsic.Control.callsub(txtStart_LostFocus)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.cmdStart_Click.End
+
+Program.Sub.cmdEnd_Click.Start
+	f.Intrinsic.Control.Try
+		v.Local.sRet.Declare(string)
+		'Browse list of routers
+		f.Intrinsic.UI.Browser(2705,"",v.Local.sRet)
+		f.Intrinsic.Control.If(v.Local.sRet,!=,"***CANCEL***")
+			f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+			f.Intrinsic.String.rtrim(v.Local.sRet(0),v.local.sRet(0))
+			gui.f_MatlLinkingDshbd.txtEnd.Text(v.Local.sRet(0))
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.cmdEnd_Click.End
+
+Program.Sub.cmdRefresh_Click.Start
+	f.Intrinsic.Control.Try	
+		'Verify that starting router is filled out
+		f.Intrinsic.Control.If(v.Screen.f_MatlLinkingDshbd!txtStart.text,=,"")
+			f.Intrinsic.UI.Msgbox("Pick a BOM first")
+		f.Intrinsic.Control.Else
+			f.Intrinsic.Control.If(v.Global.bLoaded)
+				F.Intrinsic.Control.CallSub(Serialize)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.CallSub(LoadDT)
+			F.Intrinsic.Control.CallSub(Deserialize)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.cmdRefresh_Click.End
+
+Program.Sub.txtStart_LostFocus.Start
+	'If the ending router is not filled out, fill in the starting router
+	f.Intrinsic.Control.Try
+		f.Intrinsic.Control.If(v.Screen.f_MatlLinkingDshbd!txtEnd.Text,=,"")
+			gui.f_MatlLinkingDshbd.txtEnd.Text(v.Screen.f_MatlLinkingDshbd!txtStart.Text)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.txtStart_LostFocus.End
+
+Program.Sub.f_MatlLinkingDshbd_UnLoad.Start
+	F.Intrinsic.Control.If(V.Global.bLoaded)
+		F.Intrinsic.Control.CallSub(Serialize)
+	F.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.End
+Program.Sub.f_MatlLinkingDshbd_UnLoad.End
+
+Program.Sub.ErrorMsg.Start
+v.Local.sError.Declare
+
+'Closes ODBC connection, default to connection : "con"
+f.Intrinsic.Control.If(v.ODBC!con.State, =, 1)
+	f.ODBC.Connection!con.Close
+f.Intrinsic.Control.EndIf
+
+'Generic Error message.
+f.Intrinsic.String.Build("Project GCG_5708_MATL_LINK_DSHBD.g2u {0}{0}Subroutine: {1}{0}Error: {2} with Description: {3}", v.Ambient.NewLine, v.Args.CurrentSub, v.Ambient.ErrorNumber, v.Ambient.ErrorDescription, v.Local.sError)
+f.Intrinsic.UI.Msgbox(v.Local.sError)
+Program.Sub.ErrorMsg.End
+
+Program.Sub.GetBOMLinkedField.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		v.Local.iXrefValueOption.Declare(long)
+		V.Local.iXrefFieldOption.Declare(long)
+		
+		F.ODBC.Connection!CONGETMATLSEQ.OpenCompanyConnection
+		
+		'See which field in the BOM Mstr is going to store the linking value.
+		v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 4;")
+		F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,v.Local.iXrefValueOption)
+		F.Intrinsic.Control.SelectCase(V.Local.iXrefValueOption)
+		'Serial Start
+		F.Intrinsic.Control.Case(0)
+		    V.Global.sXrefFieldToStore.Set("BM_SERIAL_START")
+		    v.Global.sXrefFieldCaption.Set("Serial Start")
+		'Serial Stop
+		F.Intrinsic.Control.Case(1)
+		    V.Global.sXrefFieldToStore.Set("BM_SERIAL_STOP")
+		    v.Global.sXrefFieldCaption.Set("Serial Stop")
+		'Drawing
+		F.Intrinsic.Control.Case(2)
+		    V.Global.sXrefFieldToStore.Set("DRAWING")
+		    v.Global.sXrefFieldCaption.Set("Drawing")
+		'Tag
+		F.Intrinsic.Control.Case(3)
+		    V.Global.sXrefFieldToStore.Set("TAG")
+		    v.Global.sXrefFieldCaption.Set("Tag")
+		F.Intrinsic.Control.EndSelect
+		
+		'Get the Xref field from BOM-RTR Xref Options table
+		v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 1;")
+		F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.iXrefFieldOption)
+		F.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+		'SEQUENCE
+		F.Intrinsic.Control.Case(0)
+		    V.Global.sXrefValue.Set("LINE_ROUTER")
+		'WORKCENTER
+		F.Intrinsic.Control.Case(1)
+		    V.Global.sXrefValue.Set("PART_WC_OUTSIDE")
+		'OP CODE
+		F.Intrinsic.Control.Case(2)
+		    V.Global.sXrefValue.Set("OPERATION")
+		F.Intrinsic.Control.EndSelect
+		
+		F.ODBC.Connection!CONGETMATLSEQ.Close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.GetBOMLinkedField.End
+
+Program.Sub.LoadDT.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		v.Local.sDT.Declare(string)
+		v.Local.sLinkString.Declare(string)
+		v.local.iCnt.Declare(long)
+		v.Local.bPhantomsFound.Declare(boolean,True)
+		v.Local.sTopLevelPart.Declare(string)
+		v.Local.fStatus.Declare(float)
+		
+		f.Intrinsic.UI.InvokeWaitDialog("Building BOM-Router Links...","GCG 5708 Material Linking")
+		f.Intrinsic.UI.ChangeWaitStatus("Building BOM-Router Links...",0,0,100)
+		
+		gui.f_MatlLinkingDshbd.GsGcDisplay.enabled(False)
+		
+		f.Intrinsic.String.Build("select ltrim(rtrim(Parent)) as Parent, Sequence_bom, Setup_qty, Quantity, Um_inventory, Part, Source, '' as SourceCode, ltrim(rtrim({1})) as BOMLinkedField, case when category='1' then 'S' ELSE CATEGORY END AS CATEGORY, '' as toberemoved, ltrim(rtrim(Parent)) as TopLevelPart from v_bom_mstr where parent = '{0}' and sequence_bom<>'0000';",v.Screen.f_MatlLinkingDshbd!txtStart.Text,v.Global.sXrefFieldToStore, v.Local.sSQL)
+		
+		f.Intrinsic.Control.If(v.Global.bLoaded)
+			v.Local.sDT.Set("dtMatlLinkTemp")
+		f.Intrinsic.Control.Else
+			v.Local.sDT.Set("dtMatlLink")
+		f.Intrinsic.Control.EndIf
+			
+		f.ODBC.Connection!con.opencompanyconnection
+			f.data.DataTable.CreateFromSQL("dtMatlSeqs","con",v.Local.sSQL)
+		f.ODBC.Connection!con.Close
+		
+		'Check for phantom parts and dig deeper if there are any returned
+		f.ODBC.Connection!con.opencompanyconnection
+		f.Data.DataView.Create("dtMatlSeqs","dvMatlSeqs",22)
+		f.Intrinsic.Control.DoUntil(v.Local.bPhantomsFound,=,False)
+			f.Data.DataView.SetFilter("dtMatlSeqs","dvMatlSeqs","Category='P' AND TOBEREMOVED=''")
+			f.Intrinsic.Control.If(v.DataView.dtMatlSeqs!dvMatlSeqs.RowCount,>,0)
+				'Phantoms found, so loop through each row, get it's subcomponents, and add them to the datatable
+				v.Local.bPhantomsFound.Set(True)
+				v.Local.iCnt.Set(0)
+				
+				f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataView.dtMatlSeqs!dvMatlSeqs.RowCount--,1)
+					f.Intrinsic.Control.If(v.DataView.dtMatlSeqs!dvMatlSeqs.RowCount,>,1)
+						f.Intrinsic.Math.Evaluate("[v.local.iCnt]/[v.dataview.dtmatlseqs!dvmatlseqs.RowCount]",v.Local.fStatus)
+					f.Intrinsic.Control.Else
+						v.Local.fStatus.Set(0.75)
+					f.Intrinsic.Control.EndIf
+					
+					f.Intrinsic.UI.ChangeWaitStatus("Building BOM-Router Links...",v.Local.fStatus,0,1)
+					f.Intrinsic.Control.If(v.DataView.dtMatlSeqs!dvMatlSeqs(v.Local.iCnt).Parent!FieldValTrim,=,v.DataView.dtMatlSeqs!dvMatlSeqs(v.Local.iCnt).TopLevelPart!FieldValTrim)
+						v.Local.sTopLevelPart.Set(v.DataView.dtMatlSeqs!dvMatlSeqs(v.Local.iCnt).Parent!FieldValTrim)
+					f.Intrinsic.Control.Else
+						v.Local.sTopLevelPart.Set(v.DataView.dtMatlSeqs!dvMatlSeqs(v.Local.iCnt).TopLevelPart!FieldValTrim)
+					f.Intrinsic.Control.EndIf
+					f.Intrinsic.String.Build("select ltrim(rtrim(Parent)) as Parent, Sequence_bom, Setup_qty, Quantity, Um_inventory, Part, Source, '' as SourceCode, ltrim(rtrim({1})) as BOMLinkedField, case when category='1' then 'S' ELSE CATEGORY END AS CATEGORY, '' as toberemoved, '{2}' as TopLevelPart from v_bom_mstr WHERE rtrim(PARENT) = '{0}' and sequence_bom <> '0000';",V.DataView.dtMatlSeqs!dvMatlSeqs(V.Local.iCnt).Part!FieldValTrim,v.Global.sXrefFieldToStore,v.Local.sTopLevelPart,v.Local.sSQL)
+					f.Data.DataTable.CreateFromSQL("dtPhantomSubComponents","con",v.Local.sSQL)
+					f.Data.DataTable.SetValue("dtMatlSeqs",v.DataView.dtMatlSeqs!dvMatlSeqs(v.Local.iCnt).DatatableIndex,"ToBeRemoved","Y")
+					f.Data.DataTable.merge("dtPhantomSubComponents","dtMatlSeqs",False,2)
+					f.Data.DataTable.Close("dtPhantomSubComponents")
+				f.Intrinsic.Control.Next(v.Local.iCnt)
+			f.Intrinsic.Control.Else
+				v.Local.bPhantomsFound.Set(False)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Loop
+		f.ODBC.Connection!con.Close
+		f.Intrinsic.UI.ChangeWaitStatus("Building BOM-Router Links...",0.75,0,1)
+		
+		'Fill the source code, then get rid of the source from the table, as this is not very meaningful to the user
+		f.Data.Dictionary.Create("dictSourceCode")
+		f.Data.Dictionary.AddItem("dictSourceCode","F","MJ")
+		f.Data.Dictionary.AddItem("dictSourceCode","P","PS")
+		f.Data.Dictionary.AddItem("dictSourceCode","J","PJ")
+		f.Data.Dictionary.AddItem("dictSourceCode","M","MS")
+		f.Data.DataTable.FillFromDictionary("dtMatlSeqs","dictSourceCode","Source","SourceCode")
+		f.Data.Dictionary.Close("dictSourceCode")
+		f.Data.DataTable.RemoveColumn("dtMatlSeqs","Source")
+		f.Intrinsic.UI.ChangeWaitStatus("Building BOM-Router Links...",0.85,0,1)
+		
+		'Based on options, build the linking string for the linq.join we will do
+		f.Intrinsic.String.Build("M.TopLevelPart=L.router and M.BOMLinkedField=L.{1}",V.Global.sXrefFieldToStore,V.Global.sXrefValue,V.Local.sLinkString)
+		
+		'Get DT of all router reqs
+		f.Intrinsic.String.Build("select ltrim(rtrim(router)) as router, ltrim(rtrim(line_router)) as Line_Router, ltrim(rtrim(part_wc_outside)) as part_wc_outside, ltrim(rtrim(operation)) as operation from v_router_line where router = '{0}' and {1}<>'';",v.Screen.f_MatlLinkingDshbd!txtStart.Text,V.Global.sXrefValue,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.data.DataTable.CreateFromSQL("dtRouterSeqs","con",v.Local.sSQL)
+		f.ODBC.Connection!con.Close
+
+		'Perform the linq.join.  Make sure that phantom parts are excluded.
+		f.Data.Linq.Join("LeftJoin","datatable","dtMatlSeqs*!*M","datatable","dtRouterSeqs*!*L",V.Local.sLinkString,"M.TOPLEVELPART*!*M.PARENT*!*M.SEQUENCE_BOM*!*M.SETUP_QTY*!*M.QUANTITY*!*M.UM_INVENTORY*!*M.PART*!*M.SOURCECODE*!*M.CATEGORY*!*M.BOMLINKEDFIELD*!*L.LINE_ROUTER*!*L.PART_WC_OUTSIDE*!*L.OPERATION","M.CATEGORY<>'P'","","M.PARENT,M.SEQUENCE_BOM",v.Local.sDT,True)
+		
+		'Close DT's so they can be recycled next time
+		f.Data.DataTable.Close("dtRouterSeqs")
+		f.Data.DataTable.Close("dtMatlSeqs")
+		
+		'Format the grid if the form has been loaded with results before
+		f.Intrinsic.Control.If(v.Global.bLoaded,=,False)
+			f.Intrinsic.Control.CallSub(LoadGV)
+		f.Intrinsic.Control.Else
+			'Clear master DT and reload the new data
+			f.Data.DataTable.DeleteRow("dtMatlLink")
+			f.Data.DataTable.acceptchanges("dtMatlLink")
+			f.Data.DataTable.Merge("dtMatlLinkTemp","dtMatlLink",False,2)
+			f.Data.DataTable.Close("dtMatlLinkTemp")
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.Finally
+		gui.f_MatlLinkingDshbd.GsGcDisplay.enabled(True)
+		f.Intrinsic.UI.CloseWaitDialog
+	f.Intrinsic.Control.EndTry
+Program.Sub.LoadDT.End
+
+Program.Sub.LoadGV.Start
+	f.Intrinsic.Control.Try
+		'Format the grid
+		gui.f_MatlLinkingDshbd.GsGcDisplay.AddGridviewFromDatatable("gvMatlLink","dtMatlLink")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SuspendLayout()
+		
+		'Set properties
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridViewProperty("gvMatlLink","MultiSelect",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridViewProperty("gvMatlLink","AllowSort",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridViewProperty("gvMatlLink","AllowFilter",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridViewProperty("gvMatlLink","OptionsDetailShowDetailTabs",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridViewProperty("gvMatlLink","OptionsViewShowGroupPanel",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridviewProperty("gvMatlLink","OptionsFilterUseNewCustomFilterDialog",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridviewProperty("gvMatlLink","OptionsViewColumnAutoWidth",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetGridviewProperty("gvMatlLink","Enableappearanceevenrow",True)
+		
+		'Caption
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","Caption","Top Level BOM Parent")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","Caption","BOM Parent Part")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","Caption","BOM Seq")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","Caption","Setup Qty")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","Caption","Run Qty")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","Caption","UM")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","Caption","Component Part")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","Caption","Source")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","Caption","Router Seq")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","Caption","WC")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","Caption","Op Code")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","Caption","Labor Seq Link")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","Caption","Category")
+		
+		'Visible
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","Visible",False)
+		
+		'Header alignment
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","HeaderHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","HeaderHAlignment","Center")
+		
+		'Cell alignment
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","CellHAlignment","Left")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","CellHAlignment","Left")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","CellHAlignment","Left")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","CellHAlignment","Center")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","CellHAlignment","Center")
+		
+		'Header font
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","HeaderFontBold",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","HeaderFontBold",True)
+		
+		'Column width
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","MinWidth","150")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","MinWidth","150")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","MinWidth","150")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","MinWidth","100")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","MinWidth","100")
+		
+		'Numeric formatting
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","DisplayCustomNumeric","#,###,###,##0.0000")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","DisplayCustomNumeric","#,###,###,##0.0000")
+		
+		'Readonly
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","Readonly",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","Readonly",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","Readonly",False)
+		
+		'Add dropdown column
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.ColumnEdit("gvMatlLink","CATEGORY","Dropdownlist"," *!*P*!*R*!*X*!*S")
+		
+		'Background color for editable fields
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","CellBackColor","LightYellow")
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","CellBackColor","LightYellow")
+		
+		'AllowEdit
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","TOPLEVELPART","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PARENT","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SEQUENCE_BOM","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SETUP_QTY","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","QUANTITY","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","UM_INVENTORY","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","SOURCECODE","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","LINE_ROUTER","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","PART_WC_OUTSIDE","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","OPERATION","AllowEdit",False)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","BOMLINKEDFIELD","AllowEdit",True)
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.SetColumnProperty("gvMatlLink","CATEGORY","AllowEdit",True)
+		
+		Gui.f_MatlLinkingDshbd.GsGcDisplay.ResumeLayout()
+		gui.f_MatlLinkingDshbd.GsGcDisplay.MainView("gvMatlLink")
+		'Set the form loaded boolean as True
+		v.Global.bLoaded.Set(True)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.LoadGV.End
+
+Program.Sub.SaveCategory.Start
+	f.Intrinsic.Control.Try
+		v.Local.sCategory.Declare(string)
+		v.Local.sSQL.Declare(string)
+		
+		'Concert category in dropdown to table-specific values
+		F.Intrinsic.Control.SelectCase(V.ARGS.Category)
+			f.Intrinsic.Control.Case("S")
+				v.Local.sCategory.Set("1")
+			f.Intrinsic.Control.Case(" ")
+				v.Local.sCategory.Set("")
+			f.Intrinsic.Control.CaseElse
+				v.Local.sCategory.Set(v.Args.Category)
+		F.Intrinsic.Control.EndSelect
+		
+		f.Intrinsic.String.Build("update bom_mstr set category='{0}' where parent='{1}' and sequence_bom='{2}';",v.Local.sCategory,v.Args.Parent,v.Args.BomSeq,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.execute(v.local.sSQL)
+		f.ODBC.Connection!con.close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.SaveCategory.End
+
+Program.Sub.SaveLinkedField.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		
+		'Save the linked field back to the BOM sequence
+		f.Intrinsic.String.Build("update bom_mstr set {0}='{1}' where parent='{2}' and sequence_bom='{3}';",v.Global.sXrefFieldToStore,v.Args.LinkedField,v.Args.Parent,v.Args.BomSeq,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.execute(v.local.sSQL)
+		f.ODBC.Connection!con.close
+		
+		'Get the info for the matching linked sequence
+		f.Intrinsic.Control.CallSub(GetLinkedSeq,"LinkedField",v.DataTable.dtMatlLink(v.Args.rowNum).BOMLinkedField!FieldValTrim,"Parent",v.DataTable.dtMatlLink(v.Args.rowNum).Parent!FieldValTrim,"RowNum",v.Args.rowNum)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.SaveLinkedField.End
+
+Program.Sub.GetLinkedSeq.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		v.Local.sRet.Declare(string)
+		
+		'Get the router seq, workcenter, and op code for the router sequence linked to the BOM sequence
+		f.Intrinsic.String.Build("select ltrim(rtrim(line_router)) as Line_Router, ltrim(rtrim(part_wc_outside)) as part_wc_outside, ltrim(rtrim(operation)) as operation from v_router_line where router = '{0}' and {1}='{2}';",v.Args.Parent,V.Global.sXrefValue,v.Args.LinkedField,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn(v.local.sSQL,v.Local.sRet)
+		f.ODBC.Connection!con.close
+		f.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+		f.Intrinsic.Control.If(v.Local.sRet.UBound,>,0)
+			f.Data.DataTable.SetValue("dtMatlLink",v.Args.RowNum,"LINE_ROUTER",v.Local.sRet(0),"PART_WC_OUTSIDE",v.Local.sRet(1),"OPERATION",v.Local.sRet(2))
+		F.Intrinsic.Control.Else
+			f.Data.DataTable.SetValue("dtMatlLink",v.Args.RowNum,"LINE_ROUTER","","PART_WC_OUTSIDE","","OPERATION","")
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.GetLinkedSeq.End
+
+Program.Sub.GsGcDisplay_CellValueChanged.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		
+		f.Intrinsic.Control.selectcase(v.Args.column)
+			'If the Category is changed, save the category back to the BOM
+			f.Intrinsic.Control.case("CATEGORY")
+				f.Intrinsic.Control.CallSub(SaveCategory,"Category",v.DataTable.dtMatlLink(v.Args.rowindex).Category!FieldValTrim,"Parent",v.DataTable.dtMatlLink(v.Args.rowindex).Parent!FieldValTrim,"BomSeq",v.DataTable.dtMatlLink(v.Args.rowindex).Sequence_BOM!FieldValTrim)
+			'If the Linked field was changed, save that back to the BOM, and use that info to get the linked router seq info 
+			f.Intrinsic.Control.Case("BOMLINKEDFIELD")
+				f.Intrinsic.Control.CallSub(SaveLinkedField,"LinkedField",v.DataTable.dtMatlLink(v.Args.rowindex).BOMLinkedField!FieldValTrim,"Parent",v.DataTable.dtMatlLink(v.Args.rowindex).Parent!FieldValTrim,"BomSeq",v.DataTable.dtMatlLink(v.Args.rowindex).Sequence_BOM!FieldValTrim,"RowNum",v.Args.rowindex)
+		f.Intrinsic.Control.EndSelect
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.GsGcDisplay_CellValueChanged.End
+
+Program.Sub.Serialize.Start
+v.Local.sSerialize.Declare
+f.Intrinsic.Control.Try
+
+f.Intrinsic.Control.If(v.DataTable.dtMatlLink.Exists, =, False)
+f.Intrinsic.Control.ExitSub
+f.Intrinsic.Control.EndIf
+
+gui.f_MatlLinkingDshbd.GsGcDisplay.Serialize("gvMatlLink", v.Local.sSerialize)
+f.Global.Registry.AddValue(v.Caller.User, v.Caller.CompanyCode, "gvMatlLink", 5708, 1000, False, "Serialize", False, 0, -999.0, 1/1/1980, 12:00:00 AM, v.Local.sSerialize)
+
+f.Intrinsic.Control.Catch
+f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+f.Intrinsic.Control.EndTry
+Program.Sub.Serialize.End
+
+Program.Sub.Deserialize.Start
+v.Local.sSerialize.Declare
+f.Intrinsic.Control.Try
+f.Global.Registry.ReadValue(v.Caller.User, v.Caller.CompanyCode, "gvMatlLink", 5708, 0, 5, "", v.Local.sSerialize)
+f.Intrinsic.Control.If(v.Local.sSerialize, <>, "")
+	f.ODBC.Connection!common.OpenCommonConnection
+		f.ODBC.Connection!common.Execute("delete from GS_REGISTRY where REG_ID = '5708'")
+	f.ODBC.Connection!common.Close
+f.Intrinsic.Control.EndIf
+
+f.Global.Registry.ReadValue(v.Caller.User, v.Caller.CompanyCode, "gvMatlLink", "5708", 1000, 6, "", v.Local.sSerialize)
+f.Intrinsic.Control.If(v.Local.sSerialize.Trim, <>, "")
+	gui.f_MatlLinkingDshbd.GsGcDisplay.Deserialize(v.Local.sSerialize)
+f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.Catch
+f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+f.Intrinsic.Control.EndTry
+Program.Sub.Deserialize.End
