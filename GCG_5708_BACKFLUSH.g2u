@@ -1,0 +1,351 @@
+Program.Sub.Preflight.Start
+	v.Global.bUseScrap.Declare(boolean)
+	v.Global.bUseClsdSeq.Declare(boolean)
+	v.Global.bUseEstQty.Declare(boolean)
+	v.Global.bUseRunOnly.Declare(boolean)
+	v.Global.bUsePtoJ.Declare(boolean)
+	v.Global.sBFAllOpCode.Declare(string)
+	v.Global.sLinkedField.Declare(string)
+	v.Global.sSourceField.Declare(string)
+	
+	Program.External.Include.Library("GCG_5708_GET_MATL_SEQ.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	f.Intrinsic.Control.Try
+		'Author: Daniel Duncan
+		'Customer: Electro-Mechanical Corporation
+		'Program Name: Material Linking Dashboard
+		'Date Started: 10/1/2019
+		'Description: This program allows the user to control which material sequences are backflushed based on the labor sequence updated.
+		'Quote: 
+		'GAP: 5708
+		
+		'If this good and scrap pieces are both 0, exit, as no backflushing will occur.  As of 11/8/19, if you do not do this, the prorgram will execute as normal because the file is generated either way.
+		f.Intrinsic.Control.If(v.Passed.GOOD-PCS,=,0)
+		F.Intrinsic.Control.AndIf(V.Passed.SCRAP-PCS,=,0)
+			F.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.CallSub(CheckBackflushingOptions)
+		f.Intrinsic.Control.CallSub(ParseFile)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.CheckBackflushingOptions.Start
+	f.Intrinsic.Control.Try
+		v.Local.bChecked.Declare(boolean)
+		v.Local.bEnd.Declare(boolean)
+		v.Local.sOpCode.Declare(string)
+		v.Local.iOptionSelected.Declare(long)
+		
+		'If CO 401125 is checked, exit
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='401125' and sequence='0000';",v.Local.bChecked)
+		f.ODBC.Connection!con.Close
+		f.Intrinsic.Control.If(v.Local.bchecked)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		
+		'If CO 401124 is checked and 402075 seq 0000 is not checked, exit.
+		'If CO 402075 seq 0000 is checked, if the op-code for the operation = CO 402075 seq 0001, exit.
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='401124' and sequence='0000';",v.Local.bChecked)
+		f.ODBC.Connection!con.Close
+		f.Intrinsic.Control.If(v.Local.bchecked)
+			f.ODBC.Connection!con.opencompanyconnection
+				f.ODBC.Connection!con.executeandreturn("select text1 from op_header where id='402075' and sequence='0001';",v.Global.sOpCode)
+			f.ODBC.Connection!con.Close
+			
+			f.Intrinsic.Control.If(v.Global.sOpCode,=,"")
+				f.Intrinsic.Control.End
+			f.Intrinsic.Control.ElseIf(v.Global.sOpCode,=,v.Args.OpCode)
+				f.Intrinsic.Control.End
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.EndIf
+		
+		'Get the fields where the links are stored, which fields are linked to, and whether backflushing should occur
+		
+		'CREATE TABLE GCG_5708_BOM_RTR (
+		'ID INTEGER NOT NULL,
+		'I_VAL INTEGER,
+		'B_VAL BIT NOT NULL );
+		
+		'ID'S:
+		'1 - Field Used for Ref
+		'2 - Ref Stored In
+		'3 - Backflushing logic
+		'4 - Barcoded Work Order
+		
+		'Check first to see if backflushing logic is even used
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select b_VAL from GCG_5708_BOM_RTR where id=3;",v.Local.bChecked)
+		f.ODBC.Connection!con.Close
+		'If not checked, this program has no reason to run.
+		f.Intrinsic.Control.If(v.Local.bChecked,=,False)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select isnull(I_VAL,-1) from GCG_5708_BOM_RTR where id=1;",v.Local.iOptionSelected)
+		f.ODBC.Connection!con.Close
+		'If null, this means the option is not filled out, and thus this program cannot be used.
+		f.Intrinsic.Control.If(v.Local.iOptionSelected,=,-1)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.SelectCase(v.local.iOptionSelected)
+			f.Intrinsic.Control.Case(0)
+				v.Global.sLinkedField.Set("Router Sequence")
+			f.Intrinsic.Control.Case(1)
+				v.Global.sLinkedField.Set("Workcenter")
+			f.Intrinsic.Control.CaseElse
+				v.Global.sLinkedField.set("Op Code")
+		f.Intrinsic.Control.EndSelect
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select isnull(I_VAL,-1) from GCG_5708_BOM_RTR where id=2;",v.Local.iOptionSelected)
+		f.ODBC.Connection!con.Close
+		'If null, this means the option is not filled out, and thus this program cannot be used.
+		f.Intrinsic.Control.If(v.Local.iOptionSelected,=,-1)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.SelectCase(v.local.iOptionSelected)
+			f.Intrinsic.Control.Case(0)
+				v.Global.sSourceField.Set("BM_Serial_Start")
+			f.Intrinsic.Control.Case(1)
+				v.Global.sSourceField.Set("BM_Serial_Stop")
+			f.Intrinsic.Control.Case(2)
+				v.Global.sSourceField.Set("Drawing")
+			f.Intrinsic.Control.CaseElse
+				v.Global.sSourceField.set("Tag")
+		f.Intrinsic.Control.EndSelect
+		
+		'If no options have caused the program to terminate, set the override and initialize the options.
+		f.Intrinsic.Control.CallSub(InitOptions)
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.CheckBackflushingOptions.End
+
+Program.Sub.InitOptions.Start
+	f.Intrinsic.Control.Try
+		'Get pertinent company options that will determine how the program will run
+		'	402228 seq 0000 - Use Scrap when calculating total pieces completed
+		'	401123 seq 0000 - Backflush even if mat seq is closed
+		'	400356 seq 0000 - Backflush Materials preceding labor seq based on estimated quantity
+		'	401127 seq 0000 - Do not issue material on setup sequence
+		'	402172 seq 0000 - Backflush material with a source of Purchased to Job
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='402228' and sequence='0000';",v.Global.bUseScrap)
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='401123' and sequence='0000';",v.Global.bUseClsdSeq)
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='400356' and sequence='0000';",v.Global.bUseEstQty)
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='401127' and sequence='0000';",v.Global.bUseRunOnly)
+			f.ODBC.Connection!con.executeandreturn("select f_boolean from op_header where id='402172' and sequence='0000';",v.Global.bUsePtoJ)
+		f.ODBC.Connection!con.Close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.InitOptions.End
+
+Program.Sub.ParseFile.Start
+	f.Intrinsic.Control.Try
+		v.Local.fGoodPcs.Declare(float)
+		v.Local.fBadPcs.Declare(float)
+		v.Local.fTotalPcs.Declare(float)
+		v.Local.sJobSeq.Declare(string)
+		v.Local.sJob.Declare(string)
+		v.Local.sJobSuf.declare(string)
+		V.local.sSQL.declare(string)
+		v.Local.sFileContents.Declare(string)
+		v.Local.sOpCode.Declare(string)
+		v.Local.sLinkedCol.Declare(string)
+		v.Local.sLinkedVal.Declare(string)
+		v.Local.sPart.Declare(string)
+		v.Local.sOutput.Declare(string)
+		v.Local.iCnt.Declare(long)
+		v.Local.sFilter.Declare(string)
+		v.Local.sFileSeq.Declare(string)
+		v.Local.iFileSeq.Declare(long)
+		v.Local.sDescription.Declare(string)
+		v.Local.sPartFilter.Declare(string)
+		v.local.sTemp.Declare(string)
+		
+		'Get passed variables: good pieces, labor sequence, and scrap pieces.  
+		v.Local.fGoodPcs.Set(v.Passed.GOOD-PCS)
+		v.Local.fBadPcs.Set(v.Passed.SCRAP-PCS)
+		v.Local.sJobSeq.Set(v.Passed.WORKORDER-SEQ)
+		v.Local.sJob.Set(v.Passed.WORKORDER)
+		V.Local.sJobSuf.Set(V.Passed.WORKORDER-SUFFIX)
+		
+		'Get the file contents passed in hook.  This file contains the following fields (tab-delimited): Sequence, Description, U/M, Part, Est Pcs, Actual Pcs, Setup Pcs (if any), Open Pcs, Closed Flag
+		f.Intrinsic.File.File2String(v.Passed.OPSFILE,v.Local.sFileContents)
+		f.Intrinsic.Control.If(v.Local.sFileContents,=,"")
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		f.Data.DataTable.CreateFromString("dtMatSeqs",v.Local.sFileContents,"Sequence*!*Description*!*UM*!*Part*!*EstPcs*!*ActualPcs*!*SetupPcs*!*OpenPcs*!*ClosedFlag*!*Filler","STRING*!*STRING*!*STRING*!*STRING*!*FLOAT*!*FLOAT*!*FLOAT*!*FLOAT*!*STRING*!*STRING",v.Ambient.Tab,v.Ambient.NewLine)
+		'Deleting last row since the file includes it even though it is useless
+		F.Data.DataTable.DeleteRow("dtMatSeqs",V.DataTable.dtMatSeqs.RowCount--)
+		
+		'Trim the part row
+		f.Data.Datatable.AddExpressionColumn("dtMatSeqs","Part_Clean","string","trim(part)")
+		'Calculate total pieces.  Note: only use scrap pieces if bUseScrap is True.  Use estimated pieces if bUseEstQty is True.  Else, only use Good Pieces.
+		
+		F.Intrinsic.Control.If(v.Global.bUseScrap)
+			f.Intrinsic.Math.Add(v.Local.fGoodPcs,v.Local.fBadPcs,v.Local.fTotalPcs)
+		f.Intrinsic.Control.Else
+			v.Local.fTotalPcs.Set(v.Local.fGoodPcs)
+		F.Intrinsic.Control.EndIf
+		
+		'Get the part we are making
+		f.Intrinsic.String.Build("select part from v_job_header where job='{0}' and suffix='{1}';",v.Local.sJob,v.Local.sJobSuf,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sPart)
+		f.ODBC.Connection!con.close
+		
+		'Look up the material sequences that should be linked to the current labor sequence, and add them to the file with the total qty to backflush.
+		f.Intrinsic.Control.SelectCase(v.Global.sLinkedField)
+			f.Intrinsic.Control.Case("Op Code")
+				v.Local.sLinkedCol.Set("OPERATION")
+			f.Intrinsic.Control.Case("Workcenter")
+				v.Local.sLinkedCol.Set("PART")
+			f.Intrinsic.Control.Case("Router Sequence")
+				v.Local.sLinkedCol.Set("ROUTER_SEQ")
+		f.Intrinsic.Control.EndSelect
+		f.Intrinsic.String.Build("select {0} from v_job_operations where job='{1}' and suffix='{2}' and seq='{3}';",v.Local.sLinkedCol,v.Local.sJob,v.Local.sJobSuf,v.Local.sJobSeq,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sLinkedVal)
+		f.ODBC.Connection!con.close
+		
+		'---------GetMatlSeq----------
+		f.Intrinsic.Control.CallSub("GCG_5708_GET_MATL_SEQ","Job",v.Local.sJob,"Suffix",v.Local.sJobSuf,"Sequence",v.Local.sJobSeq )
+		
+'		f.Intrinsic.String.Build("select distinct rtrim(part) as Part, sum(quantity) as Est_Qty_Per, um_inventory from v_bom_mstr where parent='{0}' and {1}='{2}' group by part, um_inventory",v.Local.sPart,v.Global.sSourceField,v.Local.sLinkedVal,v.Local.sSQL)
+		'Exclude any closed sequences if bUseClsdSeq is False.
+'		f.Intrinsic.Control.If(v.Global.bUseClsdSeq,=,False)
+'			f.Intrinsic.String.Build("{0} and b.flag_closed<>'Y'",v.Local.sSQL,v.Local.sSQL)
+'		f.Intrinsic.Control.EndIf
+'		'Exclude any material sequences that are not Purchase to Job if bUsePtoJ is True.
+'		f.Intrinsic.Control.If(v.Global.bUsePtoJ,=,True)
+'			f.Intrinsic.String.Build("{0} and a.source='J'",v.Local.sSQL,v.Local.sSQL)
+'		f.Intrinsic.Control.EndIf
+		'Get the final DT
+'		f.ODBC.Connection!con.opencompanyconnection
+'			f.data.DataTable.CreateFromSQL("GetMatlSeq","con",v.Local.sSQL)
+'		f.ODBC.Connection!con.close
+		
+		f.Intrinsic.Control.If(v.DataTable.GetMatlSeq.RowCount,=,0)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.Else
+			'Custom backflushing can occur
+			v.Passed.777777.Set(1)
+		f.Intrinsic.Control.EndIf
+		
+		'Create dataview so we can filter
+		f.Data.DataView.Create("dtMatSeqs","dvMatSeqs",22)
+		
+		'Compare the linked seqs with the seqs from the file.  If a sequence exists in the file, great.  If not, add it.
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.GetMatlSeq.RowCount--,1)
+			f.Intrinsic.String.Build("Part='{0}'",v.DataTable.GetMatlSeq(v.Local.iCnt).Part!FieldValTrim,v.Local.sFilter)
+			f.Data.DataView.SetFilter("dtMatSeqs","dvMatSeqs",v.Local.sFilter)
+			f.Intrinsic.Control.If(v.DataView.dtMatSeqs!dvMatSeqs.RowCount,=,0)
+				f.Intrinsic.String.LPad(v.Local.iCnt.String,"0",6,v.Local.sFileSeq)
+				f.Intrinsic.String.LPad(v.Local.sDescription," ",30,v.Local.sDescription)
+				f.Intrinsic.String.RPad(v.DataTable.GetMatlSeq(v.Local.iCnt).Part!FieldValTrim," ",20,v.Local.sPart)
+				f.Data.Datatable.AddRow("dtMatSeqs","Sequence",v.Local.iCnt.String,"Description","","UM",v.DataTable.GetMatlSeq(v.Local.iCnt).UM_Inventory!FieldValTrim,"Part",v.DataTable.GetMatlSeq(v.Local.iCnt).Part!FieldValTrim,"EstPcs","0000000.000000","ActualPcs",v.DataTable.GetMatlSeq(v.Local.iCnt).Est_Qty_Per!FieldValTrim,"SetupPcs","0000000.000000","OpenPcs","0000000.000000","ClosedFlag"," ")
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.If(v.Local.sPartFilter,!=,"")
+				f.Intrinsic.String.Build("{0},",v.Local.sPartFilter,v.Local.sPartFilter)
+			f.Intrinsic.Control.EndIf
+			f.Intrinsic.String.Build("{0}'{1}'",v.Local.sPartFilter,v.DataTable.GetMatlSeq(v.Local.iCnt).Part!FieldValTrim,v.Local.sPartFilter)
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		'Fill in the job sequence for all parts to be added, as this is what custom backflushing keys off of
+		f.Intrinsic.String.Build("select rtrim(part) as Part, seq from v_job_operations where job='{0}' and suffix='{1}';",v.Local.sJob,v.Local.sJobSuf,v.Local.sSQL)
+		f.ODBC.Connection!con.opencompanyconnection
+			f.Data.Dictionary.CreateFromSQL("dictSeqs","con",v.Local.sSQL)
+		f.ODBC.Connection!con.close
+		f.Data.Dictionary.SetDefaultReturn("dictSeqs","")
+		f.Data.DataTable.FillFromDictionary("dtMatSeqs","dictSeqs","PART_Clean","Sequence")
+		f.Data.Dictionary.Close("dictSeqs")
+		
+		'Remove any material seqs in the file that are not linked to the labor seq.  Also, exclude any materials that do not match with the job
+		f.Intrinsic.String.Build("Part_Clean in ({0}) and Sequence <> ''",v.Local.sPartFilter,v.Local.sPartFilter)
+		f.Data.DataView.setfilter("dtMatSeqs","dvMatSeqs",v.Local.sPartFilter)
+		f.Data.DataView.ToDataTable("dtMatSeqs","dvMatSeqs","dtMatSeqsFinal")
+		
+		'Set Description
+		f.ODBC.Connection!con.opencompanyconnection
+			f.Data.Dictionary.CreateFromSQL("dictInvDesc", "con", "select ltrim(rtrim(part)) as Part, Description from v_inventory_all;")
+		f.ODBC.Connection!con.close
+		f.Data.Dictionary.SetDefaultReturn("dictInvDesc","")
+		f.Data.DataTable.FillFromDictionary("dtMatSeqsFinal","dictInvDesc","Part_Clean","Description")
+		f.Data.Dictionary.Close("dictInvDesc")
+		
+		'Save file when finished
+		v.Local.iCnt.Set(0)
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtMatSeqsFinal.RowCount--,1)
+			'Seq
+			f.Intrinsic.String.LPad(v.DataTable.dtMatSeqsFinal(v.Local.iCnt).Sequence!FieldVal," ",6,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'Description
+			f.Intrinsic.String.LPad(v.DataTable.dtMatSeqsFinal(v.Local.iCnt).Description!FieldVal," ",30,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'UM
+			f.Intrinsic.String.LPad(v.DataTable.dtMatSeqsFinal(v.Local.iCnt).UM!FieldVal," ",2,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'Part
+			f.Intrinsic.String.RPad(v.DataTable.dtMatSeqsFinal(v.Local.iCnt).Part!FieldVal," ",20,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'EstPcs
+			f.Intrinsic.String.Format(0,"0.000000",v.Local.sTemp)
+			f.Intrinsic.String.LPad(v.Local.stemp," ",20,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'ActualPcs
+			f.Intrinsic.String.Format(0,"0.000000",v.Local.sTemp)
+			f.Intrinsic.String.LPad(v.Local.stemp," ",20,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'SetupPcs
+			f.Intrinsic.String.Format(0,"0.000000",v.Local.sTemp)
+			f.Intrinsic.String.LPad(v.Local.stemp," ",20,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'OpenPcs
+			f.Intrinsic.String.Format(0,"0.000000",v.Local.sTemp)
+			f.Intrinsic.String.LPad(v.Local.stemp," ",20,v.Local.sTemp)
+			f.Intrinsic.String.Build("{0}{1}{2}",v.Local.sOutput,v.Local.stemp,v.Ambient.Tab,v.Local.sOutput)
+			'ClosedFlag
+			f.Intrinsic.String.Build("{0} {1}",v.Local.sOutput,v.Ambient.Tab,v.Local.sOutput)
+			'EOL characters (3 nulls, 1 newline)
+			f.Intrinsic.String.Build("{0}{1}{1}{1}{2}",v.Local.sOutput,v.Ambient.Null,v.Ambient.NewLine,v.Local.sOutput)
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		f.Data.DataTable.Close("dtMatSeqsFinal")
+		f.Data.DataView.Close("dtMatSeqs","dvMatSeqs")
+		f.Data.DataTable.Close("dtMatSeqs")
+		f.Data.DataTable.Close("GetMatlSeq")
+			
+		f.Intrinsic.Control.If(v.Local.sOutput,=,"")
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.Else
+			f.Intrinsic.file.String2File(v.Passed.OPSFILE,v.Local.sOutput)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+	
+	f.Intrinsic.Control.End
+Program.Sub.ParseFile.End
+
+Program.Sub.ErrorMsg.Start
+v.Local.sError.Declare
+
+'Closes ODBC connection, default to connection : "con"
+f.Intrinsic.Control.If(v.ODBC!con.State, =, 1)
+	f.ODBC.Connection!con.Close
+f.Intrinsic.Control.EndIf
+
+'Generic Error message.
+f.Intrinsic.String.Build("Project GCG_5708_BACKFLUSH.g2u {0}{0}Subroutine: {1}{0}Error: {2} with Description: {3}", v.Ambient.NewLine, v.Args.CurrentSub, v.Ambient.ErrorNumber, v.Ambient.ErrorDescription, v.Local.sError)
+f.Intrinsic.UI.Msgbox(v.Local.sError)
+Program.Sub.ErrorMsg.End
