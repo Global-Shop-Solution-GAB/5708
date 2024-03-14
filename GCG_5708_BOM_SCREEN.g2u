@@ -1,0 +1,277 @@
+Program.Sub.Preflight.Start
+	v.Global.iRefOptionSelected.Declare(long)
+	v.Global.iSourceOptionSelected.Declare(long)
+	v.Global.sPart.Declare(string)
+	
+	Program.External.Include.Library("6021.lib")
+	Program.External.Include.Library("GCG_5708_GET_MATL_SEQ.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+	f.Intrinsic.Control.SelectCase(v.Caller.Hook)
+		'Hook 16471: BOM Open Lines Populate
+		f.Intrinsic.Control.Case(16471)
+			f.Intrinsic.Control.CallSub(ComponentScreenChange, "Screen", "Lines")
+			
+		'Hook 16470: BOM Open Lines Pre Save
+		f.Intrinsic.Control.Case(16470)
+			f.Intrinsic.Control.CallSub(ValidateData, "Screen", "Lines")
+		
+		'Hook 26801: BOM component append populate
+		f.Intrinsic.Control.Case(26801)
+			f.Intrinsic.Control.CallSub(ComponentScreenChange, "Screen", "Append")
+			
+		'Hook 26805: BOM component append pre-save
+		f.Intrinsic.Control.Case(26805)
+			f.Intrinsic.Control.CallSub(ValidateData, "Screen", "Append")
+	f.Intrinsic.Control.EndSelect
+Program.Sub.Main.End
+
+Program.Sub.ComponentScreenChange.Start
+	'Change field label based on what field is selected in 5708 options
+	'Serial Start: v.passed.000013
+	'Serial Stop: v.passed.000014
+	'Drawing: v.passed.000079
+	'Tag: v.passed.000078
+	f.Intrinsic.Control.Try
+		'Get the field the user is using to store the ref, then change the label		
+		f.Intrinsic.Control.CallSub(GetSelectedOption)
+		
+		f.Intrinsic.Control.If(v.Args.Screen,=,"Append")
+			f.Intrinsic.Control.SelectCase(v.Global.iRefOptionSelected)
+				f.Intrinsic.Control.Case(0)
+					'BM_Serial_Start
+					v.passed.000096.Set("Labor Seq Link")
+				f.Intrinsic.Control.Case(1)
+					'BM_Serial_Stop
+					v.passed.000097.Set("Labor Seq Link")
+				f.Intrinsic.Control.Case(2)
+					'Drawing
+					v.passed.000098.Set("Labor Seq Link")
+				f.Intrinsic.Control.case(3)
+					'Tag
+					v.passed.000099.Set("Labor Seq Link")
+			f.Intrinsic.Control.EndSelect
+		f.Intrinsic.Control.else
+			f.Intrinsic.Control.SelectCase(v.Global.iRefOptionSelected)
+				f.Intrinsic.Control.Case(0)
+					'BM_Serial_Start
+					v.passed.000013.Set("Labor Seq Link")
+				f.Intrinsic.Control.Case(1)
+					'BM_Serial_Stop
+					v.passed.000014.Set("Labor Seq Link")
+				f.Intrinsic.Control.Case(2)
+					'Drawing
+					v.passed.000079.Set("Labor Seq Link")
+				f.Intrinsic.Control.case(3)
+					'Tag
+					v.passed.000078.Set("Labor Seq Link")
+			f.Intrinsic.Control.EndSelect
+		f.Intrinsic.Control.EndIf
+		
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine, ErrorMessage, V.Ambient.ErrorDescription)
+	f.Intrinsic.Control.EndTry
+Program.Sub.ComponentScreenChange.End
+
+Program.Sub.ValidateData.Start
+	'Validate the data in whichever field was chosen in options to the data that field corresponds to, also in options (Router, Workcenter, Op Code)
+	'Serial Start: v.passed.000069
+	'Serial Stop: v.passed.000070
+	'Drawing: v.passed.000016
+	'Tag: v.passed.000017
+	f.Intrinsic.Control.Try
+		v.local.sFieldData.Declare(string)
+		v.Local.sRefField.Declare(string)
+		v.local.sErrorMsg.Declare(string)
+		
+		'Get the field the user is using to store the ref, then validate based on what it is	
+		f.Intrinsic.Control.CallSub(GetSelectedOption)
+		
+		f.Intrinsic.Control.SelectCase(v.Global.iRefOptionSelected)
+			f.Intrinsic.Control.Case(0)
+				'BM_Serial_Start
+				v.Local.sFieldData.Set(v.Passed.000069)
+				v.Local.sRefField.Set("Serial Start")
+			f.Intrinsic.Control.Case(1)
+				'BM_Serial_Stop
+				v.Local.sFieldData.Set(v.Passed.000070)
+				v.Local.sRefField.Set("Serial Stop")
+			f.Intrinsic.Control.Case(2)
+				'Drawing
+				v.Local.sFieldData.Set(v.Passed.000016)
+				v.Local.sRefField.Set("Drawing")
+			f.Intrinsic.Control.case(3)
+				'Tag
+				v.Local.sFieldData.Set(v.Passed.000017)
+				v.Local.sRefField.Set("Tag")
+		f.Intrinsic.Control.EndSelect
+		
+		
+		f.Intrinsic.Control.If(v.Local.sFieldData,=,"")
+			f.Intrinsic.String.Build("Data is required in field Labor Seq Link to link material sequences to labor sequences!",v.Local.sRefField,v.Local.sErrorMsg)
+			f.Intrinsic.UI.Msgbox(v.Local.sErrorMsg)
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine, ErrorMessage, V.Ambient.ErrorDescription)
+	f.Intrinsic.Control.EndTry
+Program.Sub.ValidateData.End
+
+Program.Sub.GetSelectedOption.Start
+	f.Intrinsic.Control.Try		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select isnull(I_VAL,-1) from GCG_5708_BOM_RTR where id=2;",v.Global.iRefOptionSelected)
+		f.ODBC.Connection!con.Close
+		'If null, this means the option is not filled out, and thus this program cannot be used.
+		f.Intrinsic.Control.If(v.Global.iRefOptionSelected,=,-1)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.ODBC.Connection!con.executeandreturn("select isnull(I_VAL,-1) from GCG_5708_BOM_RTR where id=1;",v.Global.iSourceOptionSelected)
+		f.ODBC.Connection!con.Close
+		'If null, this means the option is not filled out, and thus this program cannot be used.
+		f.Intrinsic.Control.If(v.Global.iSourceOptionSelected,=,-1)
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine, ErrorMessage, V.Ambient.ErrorDescription)
+	f.Intrinsic.Control.EndTry
+Program.Sub.GetSelectedOption.End
+
+Program.Sub.ReorderRouterSeqs.Start
+	f.Intrinsic.Control.Try
+		v.Local.sSQL.Declare(string)
+		v.Local.iCnt.Declare(long)
+		v.Local.iCnt2.Declare(long)
+		v.Local.sRet.Declare(string)
+		v.Local.sFilter.Declare(string)
+		v.Local.sPart.Declare(string)
+		v.Local.sWC.Declare(string)
+		v.Local.sRouterDesc.Declare(string)
+		v.Local.sExtraDesc1.Declare(string)
+		v.Local.sExtraDesc2.Declare(string)
+		v.Local.sExtraDesc3.Declare(string)
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			'Get the router sequences
+			f.Intrinsic.String.Build("select * from v_router_line where router='{0}' order by line_router;",v.Passed.000001,v.Local.sSQL)
+			f.Data.DataTable.CreateFromSQL("dtRtrLines","con",v.Local.sSQL)
+		f.ODBC.Connection!con.Close
+		
+		'No router, cannot run the script further
+		f.Intrinsic.Control.If(v.DataTable.dtRtrLines.RowCount,=,0)
+			f.Intrinsic.UI.Msgbox("Router does not exist.  Please first create the router for this part, then run this script again.","No Router Found")
+			f.Intrinsic.Control.End
+		f.Intrinsic.Control.EndIf
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			'Get router scheduling attributes
+			f.Intrinsic.String.Build("select * from V_SCHED_ROUTER_SUPP where rt_number='{0}' order by rt_line;",v.Passed.000001,v.Local.sSQL)
+			f.Data.DataTable.CreateFromSQL("dtRtrSched","con",v.Local.sSQL)
+			'Get router description
+			f.Intrinsic.String.Build("select top 1 description_router from v_router_header where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sRouterDesc)
+			'Get extra desc's
+			f.Intrinsic.String.Build("select top 1 desc_router_1 from V_ROUTER_DESC where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sExtraDesc1)
+			f.Intrinsic.String.Build("select top 1 desc_router_2 from V_ROUTER_DESC where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sExtraDesc2)
+			f.Intrinsic.String.Build("select top 1 desc_router_3 from V_ROUTER_DESC where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sExtraDesc3)
+		f.ODBC.Connection!con.Close		
+		
+		f.Data.Linq.Join("InnerJoin","datatable","dtRtrLines*!*L","datatable","dtRtrSched*!*S","L.ROUTER=S.RT_NUMBER AND L.Line_Router=S.rt_line","L.ROUTER*!*L.ROUTER_SUFFIX*!*L.LINE_ROUTER*!*L.ROUTER_INSERT*!*L.LMO*!*L.PART_WC_OUTSIDE*!*L.OPERATION*!*L.SET_UP*!*L.RUN_TIME*!*L.RATE*!*L.FREQUENCY*!*L.MULTIPLE*!*L.DESC_RT_LINE*!*L.UM_INVENTORY*!*L.OVERLAP*!*L.WC_FACTOR*!*L.ACTUAL_WT*!*L.FLAG_MINIMUM*!*L.AMT_MINIMUM*!*L.SEC_MIN_HR*!*L.GROUP_SEQUENCE*!*L.CREW_SIZE*!*L.RUN_TIME_D6*!*L.MES_PROCESS_ID*!*L.PRICE_PERCENT*!*L.FLAG_MAIN_COMMENT*!*L.LEAD_TIME*!*L.PART_LOCN*!*L.TOOLING_SEQ*!*L.SORT_CODE*!*L.PROJ_GROUP*!*L.SIGNOFF_GRPUSR*!*L.SIGNOFF_TYPE*!*L.BUILT_FROM_BOM*!*L.ALLOW_CHRG*!*L.OMIT_FROM_WO*!*L.FINAL_OVERRIDE_FLG*!*L.OTH_LANGUAGE*!*S.RT_NUMBER*!*S.RT_SUFFIX*!*S.RT_LINE*!*S.POST_FLOAT*!*S.SUBSEQ_SETUP*!*S.NON_CONTIG*!*S.MIN_RUN_QTY*!*S.MAX_RUN_QTY*!*S.MULT_RUN_QTY*!*S.RESETUP*!*S.PERC_MACH_UTIL*!*S.PERC_MODIFIER*!*S.ATTRIB_FLAG1*!*S.ATTRIB_FLAG2*!*S.ATTRIB_FLAG3*!*S.ATTRIB_FLAG4*!*S.ATTRIB_FLAG5*!*S.ATTRIB_FLAG6*!*S.ATTRIB_FLAG7*!*S.ATTRIB_FLAG8*!*S.ATTRIB_FLAG9*!*S.ATTRIB_FLAG10*!*S.ATTRIB_FLAG11*!*S.ATTRIB_FLAG12*!*S.ATTRIB_FLAG13*!*S.ATTRIB_FLAG14*!*S.ATTRIB_FLAG15*!*S.ATTRIB_FLAG16*!*S.ATTRIB_FLAG17*!*S.ATTRIB_FLAG18*!*S.ATTRIB_FLAG19*!*S.ATTRIB_FLAG20*!*S.ATTRIB_FLAG21*!*S.ATTRIB_FLAG22*!*S.ATTRIB_FLAG23*!*S.ATTRIB_FLAG24*!*S.ATTRIB_FLAG25*!*S.ATTRIB_FLAG26*!*S.ATTRIB_FLAG27*!*S.ATTRIB_FLAG28*!*S.ATTRIB_FLAG29*!*S.ATTRIB_FLAG30*!*S.ATTRIB_FLAG31*!*S.ATTRIB_FLAG32*!*S.SETUP_CONSTRAINT*!*S.RUN_CONSTRAINT*!*S.UNATT_SETUP*!*S.UNATT_SETUP_HRS*!*S.UNATT_RUN*!*S.UNATT_RUN_HRS*!*S.EMPL_SETUP_FLAG1*!*S.EMPL_SETUP_FLAG2*!*S.EMPL_SETUP_FLAG3*!*S.EMPL_SETUP_FLAG4*!*S.EMPL_SETUP_FLAG5*!*S.EMPL_SETUP_FLAG6*!*S.EMPL_SETUP_FLAG7*!*S.EMPL_SETUP_FLAG8*!*S.EMPL_SETUP_FLAG9*!*S.EMPL_SETUP_FLAG10*!*S.EMPL_SETUP_FLAG11*!*S.EMPL_SETUP_FLAG12*!*S.EMPL_SETUP_FLAG13*!*S.EMPL_SETUP_FLAG14*!*S.EMPL_SETUP_FLAG15*!*S.EMPL_SETUP_FLAG16*!*S.EMPL_SETUP_FLAG17*!*S.EMPL_SETUP_FLAG18*!*S.EMPL_SETUP_FLAG19*!*S.EMPL_SETUP_FLAG20*!*S.EMPL_SETUP_FLAG21*!*S.EMPL_SETUP_FLAG22*!*S.EMPL_SETUP_FLAG23*!*S.EMPL_SETUP_FLAG24*!*S.EMPL_SETUP_FLAG25*!*S.EMPL_SETUP_FLAG26*!*S.EMPL_SETUP_FLAG27*!*S.EMPL_SETUP_FLAG28*!*S.EMPL_SETUP_FLAG29*!*S.EMPL_SETUP_FLAG30*!*S.EMPL_SETUP_FLAG31*!*S.EMPL_SETUP_FLAG32*!*S.EMPL_RUN_FLAG1*!*S.EMPL_RUN_FLAG2*!*S.EMPL_RUN_FLAG3*!*S.EMPL_RUN_FLAG4*!*S.EMPL_RUN_FLAG5*!*S.EMPL_RUN_FLAG6*!*S.EMPL_RUN_FLAG7*!*S.EMPL_RUN_FLAG8*!*S.EMPL_RUN_FLAG9*!*S.EMPL_RUN_FLAG10*!*S.EMPL_RUN_FLAG11*!*S.EMPL_RUN_FLAG12*!*S.EMPL_RUN_FLAG13*!*S.EMPL_RUN_FLAG14*!*S.EMPL_RUN_FLAG15*!*S.EMPL_RUN_FLAG16*!*S.EMPL_RUN_FLAG17*!*S.EMPL_RUN_FLAG18*!*S.EMPL_RUN_FLAG19*!*S.EMPL_RUN_FLAG20*!*S.EMPL_RUN_FLAG21*!*S.EMPL_RUN_FLAG22*!*S.EMPL_RUN_FLAG23*!*S.EMPL_RUN_FLAG24*!*S.EMPL_RUN_FLAG25*!*S.EMPL_RUN_FLAG26*!*S.EMPL_RUN_FLAG27*!*S.EMPL_RUN_FLAG28*!*S.EMPL_RUN_FLAG29*!*S.EMPL_RUN_FLAG30*!*S.EMPL_RUN_FLAG31*!*S.EMPL_RUN_FLAG32*!*S.USE_ALT_SETUP*!*S.NO_MASS_UPDATE*!*S.SETUP_EMPL_REQD*!*S.RUN_EMPL_REQD","","","","dtRtrSeqs")
+		
+		'Place the sequences into a new datatable to keep track of which ones have been reassigned
+		f.Data.DataView.Create("dtRtrSeqs","dvRtrSeqs",22)
+		f.Data.DataView.ToDataTableDistinct("dtRtrSeqs","dvRtrSeqs","dtSeqs","LINE_ROUTER")
+		f.Data.DataTable.AddColumn("dtSeqs","Repurposed","boolean",False)
+		
+		'Get DT of all labor sequences
+		f.Data.DataView.SetFilter("dtRtrSeqs","dvRtrSeqs","LMO='L'")
+		f.Data.DataView.ToDataTableDistinct("dtRtrSeqs","dvRtrSeqs","dtLaborSeqs","LINE_ROUTER*!*PART_WC_OUTSIDE*!*OPERATION")
+		
+		'Reorder them in a new datatable based on material-labor linking
+		f.Data.DataTable.AddColumn("dtRtrSeqs","NewSeq","string")
+		
+		'For each labor seq, get the attached materials and add their new seq
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtLaborSeqs.RowCount--,1)
+			f.Intrinsic.Control.CallSub(GET_MATL_BY_ROUTER_SEQ,"Parent",v.Passed.000001,"RouterSeq",v.DataTable.dtlaborseqs(v.Local.icnt).LINE_ROUTER!FieldVal)
+			v.Local.iCnt2.Set(0)
+			f.Intrinsic.Control.For(v.Local.iCnt2,0,v.DataTable.GetMatlSeqs.RowCount--,1)
+				f.Intrinsic.String.Build("Part='{0}'",v.DataTable.GetMatlSeqs(v.Local.icnt2).Part!FieldVal,v.Local.sFilter)
+				v.Local.sRet.Redim(0,0)
+				f.Data.DataTable.Select("dtRtrSeqs",v.Local.sFilter,v.Local.sRet)
+				'Part is found, so add the new rtr seq using the top row in dtSeqs
+				f.Intrinsic.Control.If(v.Local.sRet,!=,"***NORETURN***")
+					F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+					f.Data.DataTable.SetValue("dtRtrSeqs",v.Local.sRet(0),"NewSeq",v.DataTable.dtSeqs(0).LINE_ROUTER!FieldVal)
+					'Shift the next sequence up
+					f.Data.Datatable.DeleteRow("dtSeqs",0)
+				f.Intrinsic.Control.EndIf
+			f.Intrinsic.Control.Next(v.Local.iCnt2)
+			'Now, add the labor seq's new seq
+			v.Local.sRet.Redim(0,0)
+			f.Intrinsic.String.Build("Part_WC_Outside='{0}'",v.DataTable.dtlaborseqs(v.Local.icnt).Part_WC_Outside!FieldVal,v.Local.sFilter)
+			f.Data.DataTable.Select("dtRtrSeqs",v.Local.sFilter,v.Local.sRet)
+			'Labor is found, so add the new rtr seq using the top row in dtSeqs
+			f.Intrinsic.Control.If(v.Local.sRet,!=,"***NORETURN***")
+				F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+				f.Data.DataTable.SetValue("dtRtrSeqs",v.Local.sRet(0),"NewSeq",v.DataTable.dtSeqs(0).LINE_ROUTER!FieldVal)
+				'Shift the next sequence up
+				f.Data.Datatable.DeleteRow("dtSeqs",0)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		'Delete the existing router
+		
+		f.ODBC.Connection!con.opencompanyconnection
+			f.Intrinsic.String.Build("delete from router_line where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.execute(v.Local.sSQL)
+			f.Intrinsic.String.Build("delete from router_header where router='{0}';",v.Passed.000001,v.Local.sSQL)
+			f.ODBC.Connection!con.execute(v.Local.sSQL)
+		f.ODBC.Connection!con.close
+		
+		'Upload the router
+		v.Local.iCnt.Set(0)
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtRtrSeqs.RowCount--,1)
+			f.Intrinsic.Control.selectcase(v.DataTable.dtRtrSeqs(v.Local.iCnt).LMO!FieldVal)
+				f.Intrinsic.Control.Case("L")
+					F.Data.DataTable.AddRow("6021", "RouterNum", V.passed.000001, "RouterDesc", V.Local.sRouterDesc, "Seq", V.DataTable.dtRtrSeqs(V.Local.iCnt).LINE_ROUTER!FieldValTrim, "LineType", "L", "WC", V.DataTable.dtRtrSeqs(V.Local.iCnt).PART_WC_OUTSIDE!FieldValTrim, "OperationCodeVend", V.DataTable.dtRtrSeqs(V.Local.iCnt).OPERATION!FieldValTrim, "SetupQty", V.DataTable.dtRtrSeqs(V.Local.iCnt).SET_UP!FieldValTrim, "RuntimeMatlQty", V.DataTable.dtRtrSeqs(V.Local.iCnt).RUN_TIME!FieldValTrim, "RateUC", V.DataTable.dtRtrSeqs(V.Local.iCnt).RATE!FieldValTrim, "UM", V.DataTable.dtRtrSeqs(V.Local.iCnt).UM_INVENTORY!FieldValTrim, "PartStepDesc", V.DataTable.dtRtrSeqs(V.Local.iCnt).DESC_RT_LINE!FieldValTrim, "Freq", V.DataTable.dtRtrSeqs(V.Local.iCnt).FREQUENCY!FieldValTrim, "Overlap", V.DataTable.dtRtrSeqs(V.Local.iCnt).OVERLAP!FieldValTrim, "WCFactor", V.DataTable.dtRtrSeqs(V.Local.iCnt).WC_FACTOR!FieldValTrim, "LeadTime", V.DataTable.dtRtrSeqs(V.Local.iCnt).LEAD_TIME!FieldValTrim)
+				F.Intrinsic.Control.Case("M")
+					F.Data.DataTable.AddRow("6021", "RouterNum", V.passed.000001, "RouterDesc", V.Local.sRouterDesc, "Seq", V.DataTable.dtRtrSeqs(V.Local.iCnt).LINE_ROUTER!FieldValTrim, "LineType", "M", "PartNum", V.DataTable.dtRtrSeqs(V.Local.iCnt).PART_WC_OUTSIDE!FieldValTrim, "OperationCodeVend", V.DataTable.dtRtrSeqs(V.Local.iCnt).OPERATION!FieldValTrim, "SetupQty", V.DataTable.dtRtrSeqs(V.Local.iCnt).SET_UP!FieldValTrim, "RuntimeMatlQty", V.Local.fMaterialTemp, "RateUC", V.DataTable.dtRtrSeqs(V.Local.iCnt).RATE!FieldValTrim, "UM", V.DataTable.dtRtrSeqs(V.Local.iCnt).UM_INVENTORY!FieldValTrim, "PartStepDesc", V.DataTable.dtRtrSeqs(V.Local.iCnt).DESC_RT_LINE!FieldValTrim, "Freq", V.DataTable.dtRtrSeqs(V.Local.iCnt).FREQUENCY!FieldValTrim, "Overlap", V.DataTable.dtRtrSeqs(V.Local.iCnt).OVERLAP!FieldValTrim, "WCFactor", V.DataTable.dtRtrSeqs(V.Local.iCnt).WC_FACTOR!FieldValTrim, "LeadTime", V.DataTable.dtRtrSeqs(V.Local.iCnt).LEAD_TIME!FieldValTrim)
+				F.Intrinsic.Control.CaseElse
+					F.Data.DataTable.AddRow("6021", "RouterNum", V.passed.000001, "RouterDesc", V.Local.sRouterDesc, "Seq", V.DataTable.dtRLines(V.Local.iCnt).LINE_ROUTER!FieldValTrim, "LineType", V.DataTable.dtRtrSeqs(V.Local.iCnt).LMO!FieldValTrim, "OperationCodeVend", V.DataTable.dtRLines(V.Local.iCnt).OPERATION!FieldValTrim, "PartStepDesc", V.DataTable.dtRLines(V.Local.iCnt).DESC_RT_LINE!FieldValTrim, "SetupQty", "0", "RuntimeMatlQty", "0", "RateUC", "0", "Freq", "0", "WCFactor", "0", "Overlap", "0", "LeadTime", "0", "MainCommentFlag", "Y")
+			f.Intrinsic.Control.EndSelect
+			
+			
+			
+			
+			
+'			
+'			f.Data.DataTable.AddRow("6021","RouterNum",v.Passed.000001,"RouterDesc",v.Local.sRouterDesc,"Seq",v.DataTable.dtRtrSeqs(v.Local.iCnt).NewSeq!FieldVal,"LineType",v.DataTable.dtRtrSeqs(v.Local.iCnt).LMO!FieldVal,"PartNum",V.Local.sPart,"WC",v.Local.sWC,"PartStepDesc",v.DataTable.dtRtrSeqs(v.Local.iCnt).Desc_Rt_Line!FieldVal,"SetupQty",v.DataTable.dtRtrSeqs(v.Local.iCnt).Set_Up!FieldVal,"RunTimeMatlQty",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"CustID",v.DataTable.dtRtrSeqs(v.Local.iCnt).Customer!FieldVal,"OriginalDate",v.DataTable.dtRtrSeqs(v.Local.iCnt).date_original!FieldVal,"OperationCodeVend",v.DataTable.dtRtrSeqs(v.Local.iCnt).Operation!FieldVal,"RateUC",v.DataTable.dtRtrSeqs(v.Local.iCnt).Rate!FieldVal,"UM",v.DataTable.dtRtrSeqs(v.Local.iCnt).um_inventory!FieldVal,
+'			"ExtraDesc1",v.Local.sExtraDesc1,"ExtraDesc2",v.Local.sExtraDesc2,"ExtraDesc3",v.Local.sExtraDesc3,"Qty1",0,"Qty2",0,"Qty3",0,"Qty4",0,"PurgeFlag","N","Freq",v.DataTable.dtRtrSeqs(v.Local.iCnt).Frequency!FieldVal,"Machine",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Overlap",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"WCFactor",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MinFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MinOutside",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"CrewSize",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"LeadTime",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"PartLoc",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"ToolingFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SortCode",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"DrawingNum",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"PostFloat",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SubSetup",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"NonContiguousFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MinRunQty",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MaxRunQty",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MultipleOfRunQty",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"ReSetupNonContiguous",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"PercMachineUtil",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SchedulingPercMod",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib1",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib2",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib3",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib4",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib5",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib6",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib7",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib8",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib9",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib10",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib11",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib12",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib13",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib14",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib15",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib16",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib17",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib18",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib19",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib20",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib21",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib22",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib23",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib24",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib25",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MachineAttrib26",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib1",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib2",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib3",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib4",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib5",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib6",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib7",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib8",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib9",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib10",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib11",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib12",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib13",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib14",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib15",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib16",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib17",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib18",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib19",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib20",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib21",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib22",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib23",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib24",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib25",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SetupLaborAttrib26","RunLaborAttrib1",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib2",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib3",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib4",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib5",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib6",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib7",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib8",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib9",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib10",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib11",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib12",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib13",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib14",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib15",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib16",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib17",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib18",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib19",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib20",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib21",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib22",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib23",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib24",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib25",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RunLaborAttrib26",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"EmpLaborConstraintOnSetup",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"EmpsRequiredOnSetup",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"EmpLaborConstraintOnRuntime",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"EmpsRequiredOnRuntime",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"UnattendedSetupFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"UnattendedSetupHours",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"UnattendedRuntimeFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"UnattendedRuntimeHours",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Scrap",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"CustPartNum",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"User1",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"User2",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Commission",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty5",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty6",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty7",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty8",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty9",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"Qty10",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SignoffGroupUser",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"SignoffType",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"PL",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"OmitFromRouterRepricingFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"RouterYieldPerc",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal,"MainCommentFlag",v.DataTable.dtRtrSeqs(v.Local.iCnt).Run_Time!FieldVal)
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		f.Data.DataTable.Close("dtRtrSeqs")
+		
+		F.Intrinsic.Control.CallSub(6021Sync)
+		F.Data.DataTable.AcceptChanges("6021")
+		
+		'Upload the seq comments
+		
+		'Update the router as completed
+		
+		
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine, ErrorMessage, V.Ambient.ErrorDescription)
+	f.Intrinsic.Control.EndTry
+Program.Sub.ReorderRouterSeqs.End
+
+Program.Sub.ErrorMsg.Start
+V.Local.sError.Declare(String)
+
+F.Intrinsic.String.Build("Error {0}{1}{0} Occurred in Subroutine {2}",V.Ambient.NewLine,V.Args.ErrorMessage,V.Args.CurrentSub,V.Local.sError)
+F.Intrinsic.UI.Msgbox(V.Local.sError)
+Program.Sub.ErrorMsg.End
