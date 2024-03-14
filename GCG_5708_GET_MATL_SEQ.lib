@@ -1,0 +1,467 @@
+Program.Sub.Preflight.Start
+V.Global.sGetMatlSeqError.Declare(String)
+'F.Data.DataTable.Create("GetMatlSeq",True)
+'F.Data.DataTable.AddColumn("GetMatlSeq","Job","String")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Suffix","String")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Sequence","String")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Part","String")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Description","String")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Est_Qty_Per","Float")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Tot_Est_Qty","Float")
+'F.Data.DataTable.AddColumn("GetMatlSeq","Date_Completed","Date")
+V.Global.iXrefFieldOption.Declare
+V.Global.sXrefValue.Declare
+V.Global.sReturn.Declare
+V.Global.iXrefValueOption.Declare
+V.Global.sXrefFieldToStore.Declare
+Program.Sub.Preflight.End
+
+Program.Sub.GCG_5708_GET_MATL_SEQ.Start
+V.Local.sJob.Declare
+V.Local.sSuffix.Declare
+V.Local.sSequence.Declare
+V.Local.sWorkcenter.Declare
+'V.Local.sWorkgroup.Declare
+V.Local.sOpCode.Declare
+V.Local.sWOParentPart.Declare
+V.Local.sSQL.Declare
+V.Local.iXrefFieldOption.Declare
+V.Local.sXrefValue.Declare
+V.Local.sReturn.Declare
+V.Local.iXrefValueOption.Declare
+V.Local.sXrefFieldToStore.Declare
+V.Local.sRouterSeq.Declare
+v.Local.bPhantomsFound.Declare(boolean,True)
+v.Local.iCnt.Declare(long)
+V.Local.sSelect.Declare
+V.Local.iPhan.Declare(Long)
+
+'Set to incoming Args
+V.Local.sJob.Set(V.Args.Job)
+V.Local.sSuffix.Set(V.Args.Suffix)
+V.Local.sSequence.Set(V.Args.Sequence)
+
+F.ODBC.Connection!CONGETMATLSEQ.OpenCompanyConnection
+
+'Grab WO Parent Part
+F.Intrinsic.String.Build("SELECT rtrim(ROUTER) as ROUTER FROM V_JOB_HEADER WHERE JOB = '{0}' AND SUFFIX = '{1}' ;",V.Local.sJob,V.Local.sSuffix,V.Local.sSQL)
+f.ODBC.Connection!CONGETMATLSEQ.executeandreturn(v.Local.sSQL,v.Local.sWOParentPart)
+
+'Grab Router Sequence
+F.Intrinsic.String.Build("SELECT ROUTER_SEQ FROM V_JOB_OPERATIONS WHERE JOB = '{0}' AND SUFFIX = '{1}' AND SEQ = '{2}';",V.Local.sJob,V.Local.sSuffix,V.Local.sSequence,V.Local.sSQL)
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.sRouterSeq)
+
+'Get Workcenter and Op Code -- Only Grab RST which is Workgroup...If a direct workcenter is selected for the work orders sequence, this will be populated with the workcenter code (ie Workcenter (SAR) and workgroup (RST) will be the same value) -- It will be assumed that if workcenter is the field used for Xref, then they will enter the workgroup in the BOM field, because you will not know which Workcenter will be chosen each time a job is created/scheduled.
+F.Intrinsic.String.Build("SELECT TOP 1 SEQRES, OPCODE FROM APSV3_JBLINES WHERE JOB = '{0}' AND SFX = '{1}' AND SEQ = '{2}' ORDER BY JOB, SFX, SEQ;",v.Local.sJob,v.Local.sSuffix,v.Local.sSequence,v.Local.sSQL)
+f.ODBC.Connection!CONGETMATLSEQ.executeandreturn(v.Local.sSQL,v.Local.sReturn)
+F.Intrinsic.String.Split(V.Local.sReturn,"*!*",V.Local.sReturn)
+V.Local.sWorkcenter.Set(V.Local.sReturn(0))
+V.Local.sOpCode.Set(V.Local.sReturn(1))
+
+'Get the Xref field from BOM-RTR Xref Options table
+v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 1;")
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.iXrefFieldOption)
+F.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+'SEQUENCE
+F.Intrinsic.Control.Case(0)
+    V.Local.sXrefValue.Set(V.Local.sRouterSeq)
+'WORKCENTER
+F.Intrinsic.Control.Case(1)
+    V.Local.sXrefValue.Set(V.Local.sWorkcenter)
+'OP CODE
+F.Intrinsic.Control.Case(2)
+    V.Local.sXrefValue.Set(V.Local.sOpCode)
+F.Intrinsic.Control.EndSelect
+
+'See which field in the BOM Mstr is going to store the linking value.
+v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 4;")
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,v.Local.iXrefValueOption)
+F.Intrinsic.Control.SelectCase(V.Local.iXrefValueOption)
+'Serial Start
+F.Intrinsic.Control.Case(0)
+    V.Local.sXrefFieldToStore.Set("BM_SERIAL_START")
+'Serial Stop
+F.Intrinsic.Control.Case(1)
+    V.Local.sXrefFieldToStore.Set("BM_SERIAL_STOP")
+'Drawing
+F.Intrinsic.Control.Case(2)
+    V.Local.sXrefFieldToStore.Set("DRAWING")
+'Tag
+F.Intrinsic.Control.Case(3)
+    V.Local.sXrefFieldToStore.Set("TAG")
+F.Intrinsic.Control.EndSelect
+
+'Now that we have all of our info, go out and see which parts are tied to this seq/wc/opcode
+'F.Intrinsic.String.Build("SELECT PART FROM BOM_MSTR WHERE PARENT = '{0}' AND {1} = '{2}' GROUP BY PART;", V.Local.sWOParentPart, v.Local.sXrefFieldToStore, v.Local.sXrefValue, V.Local.sSQL)
+f.Intrinsic.String.Build("SELECT RTRIM(PART) AS PART, QUANTITY AS EST_QTY_PER, category, '' as ToBeRemoved, UM_INVENTORY, '' as Seq FROM V_BOM_MSTR WHERE PARENT = '{0}' AND ({1} = '{2}' OR CATEGORY='P') and part <> '' and sequence_bom <> '0000';",V.Local.sWOParentPart,v.Local.sXrefFieldToStore,v.Local.sXrefValue,v.Local.sSQL)
+F.Intrinsic.Control.If(V.DataTable.dtGetMatlSeq.Exists)
+	f.Intrinsic.Control.If(v.DataView.dtGetMatlSeq!dvGetMatlSeq.Exists)
+		f.Data.DataView.Close("dtGetMatlSeq","dvGetMatlSeq")
+	f.Intrinsic.Control.EndIf
+	
+	F.Data.DataTable.Close("dtGetMatlSeq")
+F.Intrinsic.Control.EndIf
+F.Data.DataTable.CreateFromSQL("dtGetMatlSeq","CONGETMATLSEQ",V.Local.sSQL)
+
+'Check for phantom parts and dig deeper if there are any returned
+f.Data.DataView.Create("dtGetMatlSeq","dvGetMatlSeq",22)
+f.Intrinsic.Control.DoUntil(v.Local.bPhantomsFound,=,False)
+	f.Data.DataView.SetFilter("dtGetMatlSeq","dvGetMatlSeq","Category='P' AND TOBEREMOVED=''")
+	f.Intrinsic.Control.If(v.DataView.dtGetMatlSeq!dvGetMatlSeq.RowCount,>,0)
+		'Phantoms found, so loop through each row, get it's subcomponents, and add them to the datatable
+		v.Local.bPhantomsFound.Set(True)
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataView.dtGetMatlSeq!dvGetMatlSeq.RowCount--,1)
+			f.Intrinsic.String.Build("SELECT RTRIM(PART) AS PART, QUANTITY AS EST_QTY_PER, CATEGORY, '' as ToBeRemoved, UM_Inventory, '' as Seq FROM V_BOM_MSTR WHERE rtrim(PARENT) = '{0}' AND ({1} = '{2}' OR CATEGORY='P') and part <> '' and sequence_bom <> '0000';",V.DataView.dtGetMatlSeq!dvGetMatlSeq(V.Local.iCnt).Part!FieldValTrim,v.Local.sXrefFieldToStore,v.Local.sXrefValue,v.Local.sSQL)
+			f.Data.DataTable.CreateFromSQL("dtPhantomSubComponents","CONGETMATLSEQ",v.Local.sSQL)
+			f.Data.DataTable.SetValue("dtGetMatlSeq",v.DataView.dtGetMatlSeq!dvGetMatlSeq(v.Local.iCnt).DatatableIndex,"ToBeRemoved","Y")
+			F.Intrinsic.Control.For(V.Local.iPhan,V.DataTable.dtPhantomSubComponents.RowCount--,0,-1)
+				F.Intrinsic.String.Build("Part = '{0}'",V.DataTable.dtPhantomSubComponents(V.Local.iPhan).Part!FieldValTrim,V.Local.sSelect)
+				F.Data.DataTable.Select("dtGetMatlSeq",V.Local.sSelect,V.Local.sSelect)
+				F.Intrinsic.Control.If(V.Local.sSelect,<>,"***NORETURN***")
+					F.Data.DataTable.DeleteRow("dtPhantomSubComponents",V.Local.iPhan)
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Next(V.Local.iPhan)
+			F.Data.DataTable.AcceptChanges("dtPhantomSubComponents")
+			f.Data.DataTable.merge("dtPhantomSubComponents","dtGetMatlSeq",False,2)
+			f.Data.DataTable.Close("dtPhantomSubComponents")
+
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+	f.Intrinsic.Control.Else
+		v.Local.bPhantomsFound.Set(False)
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.Loop
+
+'Exclude phantom sequences that have been marked for deletion, then return the final DT
+F.Intrinsic.Control.If(V.DataTable.GetMatlSeq.Exists)
+	F.Data.DataTable.Close("GetMatlSeq")
+F.Intrinsic.Control.EndIf
+f.Data.DataView.SetFilter("dtGetMatlSeq","dvGetMatlSeq","ToBeRemoved=''")
+f.Data.DataView.ToDataTable("dtGetMatlSeq","dvGetMatlSeq","GetMatlSeq",True)
+
+'Close up shop for next time
+F.ODBC.Connection!CONGETMATLSEQ.Close
+Program.Sub.GCG_5708_GET_MATL_SEQ.End
+
+Program.Sub.GET_MATL_BY_ROUTER_SEQ.Start
+	v.Local.sParentPart.Declare(string)
+	v.Local.sRouterSeq.Declare(string)
+	V.Local.iXrefFieldOption.Declare(long)
+	V.Local.sXrefValue.Declare(string)
+	V.Local.iXrefValueOption.Declare(long)
+	V.Local.sXrefFieldToStore.Declare(string)
+	V.Local.sWorkcenter.Declare(string)
+	V.Local.sOpCode.Declare(string)
+	v.Local.sReturn.Declare(string)
+	v.Local.sSQL.Declare(string)
+	
+	v.Local.sParentPart.Set(v.Args.Parent)
+	v.Local.sRouterSeq.Set(v.Args.RouterSeq)
+	
+	f.ODBC.Connection!con.opencompanyconnection
+		'Get Workcenter and Op Code -- Only Grab RST which is Workgroup...If a direct workcenter is selected for the work orders sequence, this will be populated with the workcenter code (ie Workcenter (SAR) and workgroup (RST) will be the same value) -- It will be assumed that if workcenter is the field used for Xref, then they will enter the workgroup in the BOM field, because you will not know which Workcenter will be chosen each time a job is created/scheduled.
+		F.Intrinsic.String.Build("SELECT TOP 1 PART_WC_OUTSIDE, OPERATION FROM V_ROUTER_LINE WHERE ROUTER = '{0}' AND LINE_ROUTER = '{1}' ORDER BY LINE_ROUTER;",v.Local.sParentPart,v.Local.sRouterSeq,v.Local.sSQL)
+		f.ODBC.Connection!con.executeandreturn(v.Local.sSQL,v.Local.sReturn)
+		F.Intrinsic.String.Split(V.Local.sReturn,"*!*",V.Local.sReturn)
+		V.Local.sWorkcenter.Set(V.Local.sReturn(0))
+		V.Local.sOpCode.Set(V.Local.sReturn(1))
+		
+		'Get the Xref field from BOM-RTR Xref Options table
+		v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 1;")
+		F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.iXrefFieldOption)
+		F.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+		'SEQUENCE
+		F.Intrinsic.Control.Case(0)
+		    V.Local.sXrefValue.Set(V.Local.sRouterSeq)
+		'WORKCENTER
+		F.Intrinsic.Control.Case(1)
+		    V.Local.sXrefValue.Set(V.Local.sWorkcenter)
+		'OP CODE
+		F.Intrinsic.Control.Case(2)
+		    V.Local.sXrefValue.Set(V.Local.sOpCode)
+		F.Intrinsic.Control.EndSelect
+		
+		'See which field in the BOM Mstr is going to store the linking value.
+		v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 4;")
+		F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,v.Local.iXrefValueOption)
+		F.Intrinsic.Control.SelectCase(V.Local.iXrefValueOption)
+		'Serial Start
+		F.Intrinsic.Control.Case(0)
+		    V.Local.sXrefFieldToStore.Set("BM_SERIAL_START")
+		'Serial Stop
+		F.Intrinsic.Control.Case(1)
+		    V.Local.sXrefFieldToStore.Set("BM_SERIAL_STOP")
+		'Drawing
+		F.Intrinsic.Control.Case(2)
+		    V.Local.sXrefFieldToStore.Set("DRAWING")
+		'Tag
+		F.Intrinsic.Control.Case(3)
+		    V.Local.sXrefFieldToStore.Set("TAG")
+		F.Intrinsic.Control.EndSelect
+		
+		'Now that we have all of our info, go out and see which parts are tied to this seq/wc/opcode
+		'F.Intrinsic.String.Build("SELECT PART FROM BOM_MSTR WHERE PARENT = '{0}' AND {1} = '{2}' GROUP BY PART;", V.Local.sWOParentPart, v.Local.sXrefFieldToStore, v.Local.sXrefValue, V.Local.sSQL)
+		f.Intrinsic.String.Build("SELECT RTRIM(PART) AS PART, SUM(QUANTITY) AS EST_QTY_PER, category, '' as ToBeRemoved, UM_INVENTORY, '' as Seq FROM V_BOM_MSTR WHERE PARENT = '{0}' AND ({1} = '{2}' OR CATEGORY='P') and part <> '' and sequence_bom <> '0000' GROUP BY PART, CATEGORY, UM_Inventory;",V.Local.sWOParentPart,v.Local.sXrefFieldToStore,v.Local.sXrefValue,v.Local.sSQL)
+		F.Intrinsic.Control.If(V.DataTable.dtGetMatlSeq.Exists)
+			f.Intrinsic.Control.If(v.DataView.dtGetMatlSeq!dvGetMatlSeq.Exists)
+				f.Data.DataView.Close("dtGetMatlSeq","dvGetMatlSeq")
+			f.Intrinsic.Control.EndIf
+			
+			F.Data.DataTable.Close("dtGetMatlSeq")
+		F.Intrinsic.Control.EndIf
+		F.Data.DataTable.CreateFromSQL("dtGetMatlSeq","CONGETMATLSEQ",V.Local.sSQL)
+		
+		'Check for phantom parts and dig deeper if there are any returned
+		f.Data.DataView.Create("dtGetMatlSeq","dvGetMatlSeq",22)
+		f.Intrinsic.Control.DoUntil(v.Local.bPhantomsFound,=,False)
+			f.Data.DataView.SetFilter("dtGetMatlSeq","dvGetMatlSeq","Category='P' AND TOBEREMOVED=''")
+			f.Intrinsic.Control.If(v.DataView.dtGetMatlSeq!dvGetMatlSeq.RowCount,>,0)
+				'Phantoms found, so loop through each row, get it's subcomponents, and add them to the datatable
+				v.Local.bPhantomsFound.Set(True)
+				f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataView.dtGetMatlSeq!dvGetMatlSeq.RowCount--,1)
+					f.Intrinsic.String.Build("SELECT RTRIM(PART) AS PART, SUM(QUANTITY) AS EST_QTY_PER, CATEGORY, '' as ToBeRemoved, UM_Inventory, '' as Seq FROM V_BOM_MSTR WHERE rtrim(PARENT) = '{0}' AND ({1} = '{2}' OR CATEGORY='P') and part <> '' and sequence_bom <> '0000' GROUP BY PART, CATEGORY, UM_Inventory;",V.DataView.dtGetMatlSeq!dvGetMatlSeq(V.Local.iCnt).Part!FieldValTrim,v.Local.sXrefFieldToStore,v.Local.sXrefValue,v.Local.sSQL)
+					f.Data.DataTable.CreateFromSQL("dtPhantomSubComponents","CONGETMATLSEQ",v.Local.sSQL)
+					f.Data.DataTable.SetValue("dtGetMatlSeq",v.DataView.dtGetMatlSeq!dvGetMatlSeq(v.Local.iCnt).DatatableIndex,"ToBeRemoved","Y")
+					f.Data.DataTable.merge("dtPhantomSubComponents","dtGetMatlSeq",False,2)
+					f.Data.DataTable.Close("dtPhantomSubComponents")
+				f.Intrinsic.Control.Next(v.Local.iCnt)
+			f.Intrinsic.Control.Else
+				v.Local.bPhantomsFound.Set(False)
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Loop
+		
+		'Exclude phantom sequences that have been marked for deletion, then return the final DT
+		F.Intrinsic.Control.If(V.DataTable.GetMatlSeq.Exists)
+			F.Data.DataTable.Close("GetMatlSeq")
+		F.Intrinsic.Control.EndIf
+		f.Data.DataView.SetFilter("dtGetMatlSeq","dvGetMatlSeq","ToBeRemoved=''")
+		f.Data.DataView.ToDataTable("dtGetMatlSeq","dvGetMatlSeq","GetMatlSeq",True)
+	f.ODBC.Connection!con.Close
+Program.Sub.GET_MATL_BY_ROUTER_SEQ.End
+
+Program.Sub.GET_LINKED_FIELDS.Start
+	V.Local.sJob.Declare
+	V.Local.sSuffix.Declare
+	V.Local.sSequence.Declare
+	V.Local.sWorkcenter.Declare
+	'V.Local.sWorkgroup.Declare
+	V.Local.sOpCode.Declare
+	V.Local.sWOParentPart.Declare
+	V.Local.sSQL.Declare
+	'V.Local.iXrefFieldOption.Declare
+	'V.Local.sXrefValue.Declare
+	V.Local.sReturn.Declare
+	'V.Local.iXrefValueOption.Declare
+	'V.Local.sXrefFieldToStore.Declare
+	V.Local.sRouterSeq.Declare
+	v.Local.bPhantomsFound.Declare(boolean,True)
+	v.Local.iCnt.Declare(long)
+	
+	'Set to incoming Args
+	V.Local.sJob.Set(V.Args.Job)
+	V.Local.sSuffix.Set(V.Args.Suffix)
+	V.Local.sSequence.Set(V.Args.Sequence)
+	
+	F.ODBC.Connection!CONGETMATLSEQ.OpenCompanyConnection
+	
+	'Grab WO Parent Part
+	F.Intrinsic.String.Build("SELECT rtrim(ROUTER) as ROUTER FROM V_JOB_HEADER WHERE JOB = '{0}' AND SUFFIX = '{1}' ;",V.Local.sJob,V.Local.sSuffix,V.Local.sSQL)
+	f.ODBC.Connection!CONGETMATLSEQ.executeandreturn(v.Local.sSQL,v.Local.sWOParentPart)
+	
+	'Grab Router Sequence
+	F.Intrinsic.String.Build("SELECT ROUTER_SEQ FROM V_JOB_OPERATIONS WHERE JOB = '{0}' AND SUFFIX = '{1}' AND SEQ = '{2}';",V.Local.sJob,V.Local.sSuffix,V.Local.sSequence,V.Local.sSQL)
+	F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.sRouterSeq)
+	
+	'Get Workcenter and Op Code -- Only Grab RST which is Workgroup...If a direct workcenter is selected for the work orders sequence, this will be populated with the workcenter code (ie Workcenter (SAR) and workgroup (RST) will be the same value) -- It will be assumed that if workcenter is the field used for Xref, then they will enter the workgroup in the BOM field, because you will not know which Workcenter will be chosen each time a job is created/scheduled.
+	F.Intrinsic.String.Build("SELECT TOP 1 SEQRES, OPCODE FROM APSV3_JBLINES WHERE JOB = '{0}' AND SFX = '{1}' AND SEQ = '{2}' ORDER BY JOB, SFX, SEQ;",v.Local.sJob,v.Local.sSuffix,v.Local.sSequence,v.Local.sSQL)
+	f.ODBC.Connection!CONGETMATLSEQ.executeandreturn(v.Local.sSQL,v.Local.sReturn)
+	F.Intrinsic.String.Split(V.Local.sReturn,"*!*",V.Local.sReturn)
+	V.Local.sWorkcenter.Set(V.Local.sReturn(0))
+	V.Local.sOpCode.Set(V.Local.sReturn(1))
+	
+	'Get the Xref field from BOM-RTR Xref Options table
+	v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 1;")
+	F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.iXrefFieldOption)
+	F.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+	'SEQUENCE
+	F.Intrinsic.Control.Case(0)
+	    V.Local.sXrefValue.Set(V.Local.sRouterSeq)
+	'WORKCENTER
+	F.Intrinsic.Control.Case(1)
+	    V.Local.sXrefValue.Set(V.Local.sWorkcenter)
+	'OP CODE
+	F.Intrinsic.Control.Case(2)
+	    V.Local.sXrefValue.Set(V.Local.sOpCode)
+	F.Intrinsic.Control.EndSelect
+	
+	'See which field in the BOM Mstr is going to store the linking value.
+	v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 4;")
+	F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,v.Local.iXrefValueOption)
+	F.Intrinsic.Control.SelectCase(V.Local.iXrefValueOption)
+	'Serial Start
+	F.Intrinsic.Control.Case(0)
+	    V.Local.sXrefFieldToStore.Set("BM_SERIAL_START")
+	'Serial Stop
+	F.Intrinsic.Control.Case(1)
+	    V.Local.sXrefFieldToStore.Set("BM_SERIAL_STOP")
+	'Drawing
+	F.Intrinsic.Control.Case(2)
+	    V.Local.sXrefFieldToStore.Set("DRAWING")
+	'Tag
+	F.Intrinsic.Control.Case(3)
+	    V.Local.sXrefFieldToStore.Set("TAG")
+	F.Intrinsic.Control.EndSelect
+Program.Sub.GET_LINKED_FIELDS.End
+
+Program.Sub.CACHE_BOM_SEQS.Start
+	f.Intrinsic.Control.Try
+		v.Local.iCnt.Declare(long)
+		
+		'Get all BOM's from the temp table GCG_5708_BOM_QUEUE
+		f.ODBC.Connection!con.opencompanyconnection
+		
+		f.Data.DataTable.CreateFromSQL("dtQueue","con","select part from gcg_5708_bom_queue;")
+		f.Data.DataTable.Create("dtCache")
+		f.Data.DataTable.AddColumn("dtCache","TOP_PARENT","String")
+		f.Data.DataTable.AddColumn("dtCache","PARENT","String")
+		f.Data.DataTable.AddColumn("dtCache","PART","String")
+		f.Data.DataTable.AddColumn("dtCache","EST_QTY_PER","float")
+		f.Data.DataTable.AddColumn("dtCache","CATEGORY","String")
+		f.Data.DataTable.AddColumn("dtCache","UM_INVENTORY","String")
+		f.Data.DataTable.AddColumn("dtCache","SEQ","FLOAT")
+		
+		'For each, get all sequences, replace each phantom with its subcomponents
+		f.Intrinsic.Control.For(v.Local.iCnt,0,v.DataTable.dtQueue.RowCount--,1)
+			
+		f.Intrinsic.Control.Next(v.Local.iCnt)
+		
+		'Save resequenced BOM seq's to GCG_5708_BOM_CACHE
+		f.Data.DataTable.SaveToDB("dtCache","con","GCG_5708_BOM_CACHE","PARENT*!*PART",256)
+		
+		f.ODBC.Connection!con.Close
+	f.Intrinsic.Control.Catch
+		f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+	f.Intrinsic.Control.EndTry
+Program.Sub.CACHE_BOM_SEQS.End
+
+Program.Sub.GCG5708BulkGetMatlSeq.Start
+'PASS DTNAME as Global Datatable with 5 columns JSS, JS, Job, Suffix, Sequence
+V.Local.sJob.Declare
+V.Local.sSuffix.Declare
+V.Local.sSequence.Declare
+V.Local.sWorkcenter.Declare
+'V.Local.sWorkgroup.Declare
+V.Local.sOpCode.Declare
+V.Local.sWOParentPart.Declare
+V.Local.sSQL.Declare
+V.Local.iXrefFieldOption.Declare
+V.Local.sXrefValue.Declare
+V.Local.sReturn.Declare
+V.Local.iXrefValueOption.Declare
+V.Local.sXrefFieldToStore.Declare
+'New
+v.Local.sJSS.Declare
+v.Local.sJS.Declare
+v.Local.sJobs.Declare
+v.Local.sSuffixes.Declare
+v.Local.sSequences.Declare
+v.Local.sDTLinqPiece.Declare
+v.Local.sRouterAndLink.Declare
+v.Local.bTableExists.Declare
+'Set to incoming Args
+'V.Local.sJob.Set(V.Args.Job)
+'V.Local.sSuffix.Set(V.Args.Suffix)
+'V.Local.sSequence.Set(V.Args.Sequence)
+F.ODBC.Connection!CONGETMATLSEQ.OpenCompanyConnection
+'Get the Xref field from BOM-RTR Xref Options table
+v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 1;")
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,V.Local.iXrefFieldOption)
+F.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+'SEQUENCE
+F.Intrinsic.Control.Case(0)
+    V.Local.sXrefValue.Set(V.Local.sSequence)
+'WORKCENTER
+F.Intrinsic.Control.Case(1)
+    V.Local.sXrefValue.Set(V.Local.sWorkcenter)
+'OP CODE
+F.Intrinsic.Control.Case(2)
+    V.Local.sXrefValue.Set(V.Local.sOpCode)
+F.Intrinsic.Control.EndSelect
+'See which field in the BOM Mstr is going to store the linking value.
+v.Local.sSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = 4;")
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTEANDRETURN(V.Local.sSQL,v.Local.iXrefValueOption)
+F.Intrinsic.Control.SelectCase(V.Local.iXrefValueOption)
+'Serial Start
+F.Intrinsic.Control.Case(0)
+    V.Local.sXrefFieldToStore.Set("BM_SERIAL_START")
+'Serial Stop
+F.Intrinsic.Control.Case(1)
+    V.Local.sXrefFieldToStore.Set("BM_SERIAL_STOP")
+'Drawing
+F.Intrinsic.Control.Case(2)
+    V.Local.sXrefFieldToStore.Set("DRAWING")
+'Tag
+F.Intrinsic.Control.Case(3)
+    V.Local.sXrefFieldToStore.Set("TAG")
+F.Intrinsic.Control.EndSelect
+'Function.Intrinsic.Debug.InvokeDebugger
+'Create Tables
+F.ODBC.Connection!CONGETMATLSEQ.TABLEEXISTS("GCG_5708_JSS",V.Local.bTableExists)
+f.Intrinsic.Control.If(v.Local.bTableExists.Not)
+	f.ODBC.Connection!CONGETMATLSEQ.execute("CREATE TABLE GCG_5708_JSS (JSS CHAR(15) NOT NULL, JS CHAR(9) NOT NULL, JOB CHAR(6) NOT NULL, SUFFIX CHAR(3) NOT NULL, SEQUENCE CHAR(6) NOT NULL);")
+	f.ODBC.Connection!CONGETMATLSEQ.execute("CREATE INDEX pk_jss ON GCG_5708_JSS (JSS);")
+f.Intrinsic.Control.EndIf
+F.ODBC.Connection!CONGETMATLSEQ.TABLEEXISTS("GCG_5708_ROUTERLINK",V.Local.bTableExists)
+f.Intrinsic.Control.If(v.Local.bTableExists.Not)
+	f.ODBC.Connection!CONGETMATLSEQ.execute("CREATE TABLE GCG_5708_ROUTERLINK (ROUTERLINK CHAR(30) NOT NULL);")
+f.Intrinsic.Control.EndIf
+f.ODBC.Connection!CONGETMATLSEQ.Execute("DELETE FROM GCG_5708_JSS;")
+F.Data.DataTable.SaveToDB(V.Args.DTNAME,"CONGETMATLSEQ","GCG_5708_JSS","JSS",128,"JSS@!@JSS*!*JS@!@JS*!*JOB@!@JOB*!*SUFFIX@!@SUFFIX*!*SEQUENCE@!@SEQUENCE")
+'Grab WO Parent Part
+F.Intrinsic.String.Build("SELECT CONCAT(JOB,SUFFIX) AS JS, RTRIM(ROUTER) AS ROUTER FROM V_JOB_HEADER WHERE concat(JOB,SUFFIX) IN (SELECT JS FROM GCG_5708_JSS) ORDER BY JOB, SUFFIX;",V.Local.sJS,V.Local.sSQL)
+F.Data.Dictionary.CreateFromSQL("dicJSRouter","CONGETMATLSEQ",v.Local.sSQL)
+F.Data.DataTable.AddColumn(V.Args.DTNAME,"ROUTER","STRING")
+F.Data.Dictionary.SetDefaultReturn("dicJSRouter","")
+F.Data.DataTable.FillFromDictionary(V.Args.DTNAME,"dicJSRouter","JS","ROUTER")
+F.Data.Dictionary.Close("dicJSRouter")
+'Get Workcenter and Op Code -- Only Grab RST which is Workgroup...If a direct workcenter is selected for the work orders sequence, this will be populated with the workcenter code (ie Workcenter (SAR) and workgroup (RST) will be the same value) -- It will be assumed that if workcenter is the field used for Xref, then they will enter the workgroup in the BOM field, because you will not know which Workcenter will be chosen each time a job is created/scheduled.
+F.Intrinsic.String.Build("SELECT JSS, RTRIM(RST) AS RST, RTRIM(OPCODE) AS OPCODE, MAX(BNo) as BNo FROM APSV3_UBDETAIL WHERE JSS IN (SELECT JSS FROM GCG_5708_JSS) GROUP BY JSS, RST, OPCODE ORDER BY JSS;",V.Local.sJSS,v.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtScheduleData","CONGETMATLSEQ",v.Local.sSQL)
+f.Intrinsic.String.Build("{0}*!*M",v.Args.DTNAME,v.Local.sDTLinqPiece)
+F.Data.Linq.Join("Leftjoin","datatable",v.Local.sDTLinqPiece,"datatable","dtScheduleData*!*S","M.JSS=S.JSS","M.JSS*!*M.JS*!*M.JOB*!*M.SUFFIX*!*M.SEQUENCE*!*M.ROUTER*!*S.RST*!*S.OPCODE","","","","dtJoined",True)
+f.Data.DataTable.Close("dtScheduleData")
+'Join Router and Link Value into an expression column
+f.Intrinsic.Control.SelectCase(V.Local.iXrefFieldOption)
+'SEQUENCE
+f.Intrinsic.Control.Case(0)
+	F.Data.DataTable.AddExpressionColumn("dtJoined","RouterLink","String","ROUTER+SEQUENCE")
+'WORKCENTER
+f.Intrinsic.Control.Case(1)
+	F.Data.DataTable.AddExpressionColumn("dtJoined","RouterLink","String","ROUTER+RST")
+'OPCODE
+f.Intrinsic.Control.Case(2)
+	F.Data.DataTable.AddExpressionColumn("dtJoined","RouterLink","String","ROUTER+OPCODE")
+f.Intrinsic.Control.EndSelect
+'SAVE TO TEMP TABLE
+f.Data.DataView.Create("dtJoined","dvRouterLink",22,"RouterLink <> ''","")
+F.Data.DataView.ToDataTabledistinct("dtJoined","dvRouterLink","dtRouterLink","RouterLink",True)
+F.ODBC.Connection!CONGETMATLSEQ.EXECUTE("DELETE FROM GCG_5708_ROUTERLINK")
+
+'F.Data.DataTable.SaveToDB("dtRouterLink","CONGETMATLSEQ","GCG_5708_ROUTERLINK","RouterLink",128,"ROUTERLINK@!@RouterLink")
+F.Data.DataTable.SaveToDB("dtRouterLink","CONGETMATLSEQ","GCG_5708_ROUTERLINK","RouterLink",128)
+f.Data.DataView.Close("dtJoined","dvRouterLink")
+'Now that we have all of our info, go out and see which parts are tied to this seq/wc/opcode
+'PASS parent and sequence field val as: '210900','210900000500','210900005000',etc
+F.Intrinsic.String.Build("SELECT CONCAT(RTRIM(PARENT),RTRIM({1})) AS ROUTERLINK, RTRIM(PARENT) AS PARENT, RTRIM({1}) AS LABORSEQUENCE, RTRIM(PART) AS PART, SUM(QUANTITY) AS EST_QTY_PER FROM BOM_MSTR WHERE CONCAT(RTRIM(PARENT),RTRIM({1})) IN (SELECT RTRIM(ROUTERLINK) FROM GCG_5708_ROUTERLINK) GROUP BY PARENT, PART, {1};", V.Local.sRouterAndLink, v.Local.sXrefFieldToStore, V.Local.sSQL)
+F.Data.DataTable.CreateFromSQL("dtMaterialLinking","CONGETMATLSEQ",V.Local.sSQL)
+'Fill in the labor sequence each material sequence is joined to
+F.Data.Linq.Join("LeftJoin","datatable","dtJoined*!*J","datatable","dtMaterialLinking*!*M","M.ROUTERLINK=J.RouterLink","J.JSS*!*J.JS*!*J.JOB*!*J.SUFFIX*!*J.SEQUENCE*!*J.ROUTER*!*J.RST*!*J.OPCODE*!*M.PARENT*!*M.LABORSEQUENCE*!*M.PART*!*M.EST_QTY_PER","","","","BulkGetMatlSeq",True)
+f.Data.DataTable.AddColumn("BulkGetMatlSeq","UM_INVENTORY","string","")
+F.Data.Dictionary.CreateFromSQL("dictInvUM","CONGETMATLSEQ","select rtrim(part), um_inventory from v_inventory_all;")
+f.Data.Dictionary.SetDefaultReturn("dictInvUM","")
+f.Data.DataTable.FillFromDictionary("BulkGetMatlSeq","dictInvUM","Router","UM_Inventory")
+f.Data.Dictionary.Close("dictInvUM")
+f.Data.DataTable.Close("dtJoined")
+f.Data.DataTable.Close("dtMaterialLinking")
+'Close up shop for next time
+F.ODBC.Connection!CONGETMATLSEQ.Close
+Program.Sub.GCG5708BulkGetMatlSeq.End
