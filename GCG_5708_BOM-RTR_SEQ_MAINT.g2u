@@ -1,0 +1,230 @@
+Program.Sub.ScreenSU.Start
+Gui.F_MAIN..Create
+Gui.F_MAIN..Caption("Mat'l Xref Opts")
+Gui.F_MAIN..Size(3960,4560)
+Gui.F_MAIN..MinX(0)
+Gui.F_MAIN..MinY(0)
+Gui.F_MAIN..Position(0,0)
+Gui.F_MAIN..BackColor(-2147483633)
+Gui.F_MAIN..MousePointer(0)
+Gui.F_MAIN..Sizeable(False)
+Gui.F_MAIN..Event(UnLoad,Form_UnLoad)
+Gui.F_MAIN..MaxButton(False)
+Gui.F_MAIN.FRAME_XREF_OPT.Create(Frame)
+Gui.F_MAIN.FRAME_XREF_OPT.Size(3540,1860)
+Gui.F_MAIN.FRAME_XREF_OPT.Position(90,120)
+Gui.F_MAIN.LBL_XREF.Create(Label,"Cross Reference Options",True,3390,345,0,105,180,True,0,"Arial Black",8,-2147483633,0)
+Gui.F_MAIN.LBL_XREF.Parent("FRAME_XREF_OPT")
+Gui.F_MAIN.DDL_XREF_OPT.Create(DropDownList)
+Gui.F_MAIN.DDL_XREF_OPT.Size(3270,330)
+Gui.F_MAIN.DDL_XREF_OPT.Position(135,705)
+Gui.F_MAIN.DDL_XREF_OPT.Parent("FRAME_XREF_OPT")
+Gui.F_MAIN.DDL_XREF_OPT.Event(Change,DDL_XREF_OPT_Change)
+Gui.F_MAIN.DDL_XREF_OPT.Event(Click,DDL_XREF_OPT_Click)
+Gui.F_MAIN.LBL_FIELD.Create(Label,"Field Used For Ref:",True,1935,255,0,150,495,True,0,"Arial",8,-2147483633,0)
+Gui.F_MAIN.LBL_FIELD.Parent("FRAME_XREF_OPT")
+Gui.F_MAIN.lbl1.Create(Label,"Ref Stored In:",True,1935,255,0,150,1170,True,0,"Arial",8,-2147483633,0)
+Gui.F_MAIN.lbl1.Parent("FRAME_XREF_OPT")
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Create(DropDownList)
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Size(3270,330)
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Position(135,1380)
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Parent("FRAME_XREF_OPT")
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Event(Click,DDL_FIELD_STORED_IN_Click)
+Gui.F_MAIN.DDL_FIELD_STORED_IN.Event(Change,DDL_FIELD_STORED_IN_Change)
+Gui.F_MAIN.FRAME_XREF_FUNCTIONS.Create(Frame)
+Gui.F_MAIN.FRAME_XREF_FUNCTIONS.Size(3525,1695)
+Gui.F_MAIN.FRAME_XREF_FUNCTIONS.Position(105,1950)
+Gui.F_MAIN.CHK_BACKFLUSH.Create(CheckBox)
+Gui.F_MAIN.CHK_BACKFLUSH.Size(1830,360)
+Gui.F_MAIN.CHK_BACKFLUSH.Position(120,465)
+Gui.F_MAIN.CHK_BACKFLUSH.Parent("FRAME_XREF_FUNCTIONS")
+Gui.F_MAIN.CHK_BACKFLUSH.Caption("Backflushing Logic")
+Gui.F_MAIN.CHK_BARCODE_WO.Create(CheckBox)
+Gui.F_MAIN.CHK_BARCODE_WO.Size(2025,360)
+Gui.F_MAIN.CHK_BARCODE_WO.Position(120,810)
+Gui.F_MAIN.CHK_BARCODE_WO.Parent("FRAME_XREF_FUNCTIONS")
+Gui.F_MAIN.CHK_BARCODE_WO.Caption("Barcoded Work Order")
+Gui.F_MAIN.LBL_FUNCTIONALITY.Create(Label,"Functionality Options",True,2385,255,0,120,240,True,0,"Arial Black",8,-2147483633,0)
+Gui.F_MAIN.LBL_FUNCTIONALITY.Parent("FRAME_XREF_FUNCTIONS")
+Gui.F_MAIN.CHK_REORDERSEQ.Create(CheckBox)
+Gui.F_MAIN.CHK_REORDERSEQ.Size(3315,360)
+Gui.F_MAIN.CHK_REORDERSEQ.Position(120,1155)
+Gui.F_MAIN.CHK_REORDERSEQ.Parent("FRAME_XREF_FUNCTIONS")
+Gui.F_MAIN.CHK_REORDERSEQ.Caption("Reorder Barcode WO Sequences")
+Gui.F_MAIN.CMD_SAVE.Create(Button)
+Gui.F_MAIN.CMD_SAVE.Size(855,375)
+Gui.F_MAIN.CMD_SAVE.Position(2790,3750)
+Gui.F_MAIN.CMD_SAVE.Caption("Save")
+Gui.F_MAIN.CMD_SAVE.Event(Click,CMD_SAVE_Click)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+V.Global.bOptsExist.Declare
+v.Global.bInitialSetting.Declare
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+v.Local.sIcon.Declare
+'icon file path
+f.Intrinsic.String.Build("{0}\Art\gss2.ico",v.Caller.GlobalDir,v.Local.sIcon)
+
+'open connection
+F.ODBC.Connection!CONX.OPENCOMPANYCONNECTION
+
+'call subs
+F.Intrinsic.Control.CallSub(ADD_INITIAL_OPTS)
+f.Intrinsic.Control.CallSub(GET_XREF_OPTION)
+
+'show form
+gui.F_MAIN..Icon(v.Local.sIcon)
+gui.F_MAIN..Visible(True)
+Program.Sub.Main.End
+
+Program.Sub.CMD_SAVE_Click.Start
+V.Local.SSQL.Declare
+V.Local.IDDLVALUE.Declare
+
+'SAVE DROP DOWN LIST VALUE (XREF OPTION)
+'Need to check and see if they picked workcenter or op code, if they did, check and see if they have that op code or that wc more than once in the same router.  Warn them about picking this option.
+V.Local.IDDLVALUE.Set(V.Screen.F_MAIN!DDL_XREF_OPT.LISTINDEX)
+'F.Intrinsic.String.Build("UPDATE GCG_5708_BOM_RTR SET I_VAL = '{0}' WHERE ID = '1';",V.Local.IDDLVALUE,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE("DELETE FROM GCG_5708_BOM_RTR WHERE ID='1';")
+F.Intrinsic.String.Build("insert into GCG_5708_BOM_RTR (ID,I_VAL,B_VAL) VALUES('1','{0}',0);",V.Local.IDDLVALUE,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE(V.Local.SSQL)
+
+'SAVE DROP DOWN LIST VALUE (XREF OPTION)
+F.ODBC.Connection!CONX.EXECUTE("DELETE FROM GCG_5708_BOM_RTR WHERE ID='4';")
+V.Local.IDDLVALUE.Set(V.Screen.F_MAIN!DDL_FIELD_STORED_IN.LISTINDEX)
+F.Intrinsic.String.Build("INSERT INTO GCG_5708_BOM_RTR (ID,I_VAL,B_VAL) VALUES('4','{0}',0);",V.Local.IDDLVALUE,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE(V.Local.SSQL)
+
+'SAVE BACKFLUSHING OPTION
+F.ODBC.Connection!CONX.EXECUTE("DELETE FROM GCG_5708_BOM_RTR WHERE ID='2';")
+F.Intrinsic.String.Build("INSERT INTO GCG_5708_BOM_RTR (ID,I_VAL,B_VAL) VALUES ('2',0,{0});",V.Screen.F_MAIN!CHK_BACKFLUSH.Value.STRING,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE(V.Local.SSQL)
+
+'SAVE BARCODED WORK ORDER OPTION
+F.ODBC.Connection!CONX.EXECUTE("DELETE FROM GCG_5708_BOM_RTR WHERE ID='3';")
+F.Intrinsic.String.Build("INSERT INTO GCG_5708_BOM_RTR (ID,I_VAL,B_VAL) VALUES ('3',0,{0});",V.Screen.F_MAIN!CHK_BARCODE_WO.Value.STRING,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE(V.Local.SSQL)
+
+'SAVE REORDER SEQUENCES OPTION
+F.ODBC.Connection!CONX.EXECUTE("DELETE FROM GCG_5708_BOM_RTR WHERE ID='5';")
+F.Intrinsic.String.Build("INSERT INTO GCG_5708_BOM_RTR (ID,I_VAL,B_VAL) VALUES ('5',0,{0});",V.Screen.F_MAIN!CHK_REORDERSEQ.Value.STRING,V.Local.SSQL)
+F.ODBC.Connection!CONX.EXECUTE(V.Local.SSQL)
+
+F.Intrinsic.UI.Msgbox("VALUES SAVED SUCCESSFULLY","5708 OPTIONS SAVE")
+Program.Sub.CMD_SAVE_Click.End
+
+Program.Sub.Form_UnLoad.Start
+f.ODBC.Connection!conx.Close
+F.Intrinsic.Control.End
+Program.Sub.Form_UnLoad.End
+
+Program.Sub.GET_XREF_OPTION.Start
+V.Local.SSQL.Declare
+V.Local.IRETURN.Declare
+V.Local.BRETURN.Declare
+
+'SET INITIAL DROP DOWN LIST VALUES
+GUI.F_MAIN.DDL_XREF_OPT.AddItem("Router Sequence",0)
+GUI.F_MAIN.DDL_XREF_OPT.AddItem("Workcenter",1)
+GUI.F_MAIN.DDL_XREF_OPT.AddItem("Op Code",2)
+
+GUI.F_MAIN.DDL_FIELD_STORED_IN.AddItem("Serial Start",0)
+GUI.F_MAIN.DDL_FIELD_STORED_IN.AddItem("Serial Stop",1)
+GUI.F_MAIN.DDL_FIELD_STORED_IN.AddItem("Drawing",2)
+GUI.F_MAIN.DDL_FIELD_STORED_IN.AddItem("Tag",3)
+
+
+'GRAB CURRENT OPTION SETTING FROM TABLE
+V.Local.SSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = '1';")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.IRETURN)
+
+'SET LIST INDEX TO VALUE PULLED FROM OPTIONS TABLE, IF NO OPTION ALREADY SET, DEFAULT TO 0.
+v.Global.bInitialSetting.Set(True)
+F.Intrinsic.Control.If(V.Local.IRETURN,=,V.Ambient.Null)
+	GUI.F_MAIN.DDL_XREF_OPT.ListIndex(0)
+F.Intrinsic.Control.Else
+	GUI.F_MAIN.DDL_XREF_OPT.ListIndex(V.Local.IRETURN)
+F.Intrinsic.Control.EndIf
+
+'GRAB CURRENT OPTION SETTING FROM TABLE
+V.Local.SSQL.Set("SELECT I_VAL FROM GCG_5708_BOM_RTR WHERE ID = '4';")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.IRETURN)
+
+'SET LIST INDEX TO VALUE PULLED FROM OPTIONS TABLE, IF NO OPTION ALREADY SET, DEFAULT TO 0.
+v.Global.bInitialSetting.Set(True)
+F.Intrinsic.Control.If(V.Local.IRETURN,=,V.Ambient.Null)
+	GUI.F_MAIN.DDL_FIELD_STORED_IN.ListIndex(0)
+F.Intrinsic.Control.Else
+	GUI.F_MAIN.DDL_FIELD_STORED_IN.ListIndex(V.Local.IRETURN)
+F.Intrinsic.Control.EndIf
+
+'BACKFLUSH CHK BOX
+V.Local.SSQL.Set("SELECT B_VAL FROM GCG_5708_BOM_RTR WHERE ID = '2';")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.BRETURN)
+F.Intrinsic.Control.If(V.Local.BRETURN)
+	GUI.F_MAIN.CHK_BACKFLUSH.Value(1)
+F.Intrinsic.Control.EndIf
+
+'BARCODED WO CHK BOX
+V.Local.SSQL.Set("SELECT B_VAL FROM GCG_5708_BOM_RTR WHERE ID = '3';")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.BRETURN)
+F.Intrinsic.Control.If(V.Local.BRETURN)
+	GUI.F_MAIN.CHK_BARCODE_WO.Value(1)
+F.Intrinsic.Control.EndIf
+
+'REORDER SEQS CHK BOX
+V.Local.SSQL.Set("SELECT B_VAL FROM GCG_5708_BOM_RTR WHERE ID = '5';")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.BRETURN)
+F.Intrinsic.Control.If(V.Local.BRETURN)
+	GUI.F_MAIN.CHK_REORDERSEQ.Value(1)
+F.Intrinsic.Control.EndIf
+
+Program.Sub.GET_XREF_OPTION.End
+
+Program.Sub.DDL_XREF_OPT_Change.Start
+'CHANGING THIS OPTION IF WE HAVE ALREADY SET IT, CAN HAVE SOME BIG RAMIFICATIONS, PROCEED WITH CAUTION
+v.Global.bInitialSetting.Set(False)
+Program.Sub.DDL_XREF_OPT_Change.End
+
+Program.Sub.ADD_INITIAL_OPTS.Start
+V.Local.SSQL.Declare
+V.Local.SRETURN.Declare
+
+'CHECK TABLE FOR OPTION RECORDS
+V.Local.SSQL.Set("SELECT ID FROM GCG_5708_BOM_RTR WHERE ID IN ('1','2','3','4') ORDER BY ID;")
+F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.SSQL,V.Local.SRETURN)
+F.Intrinsic.String.Split(V.Local.SRETURN,"#$#",V.Local.SRETURN)
+
+'SEE IF ALL OPTION RECORDS EXISTS, ADD IF THEY DO NOT.
+F.Intrinsic.Control.If(V.Local.SRETURN.UBOUND,=,3)
+	v.Global.bOptsExist.Set(True)
+	F.Intrinsic.Control.ExitSub
+F.Intrinsic.Control.Else
+	'ADD INITIAL OPTIONS
+	'XXXXXXXXXXXXXXXXXXX
+F.Intrinsic.Control.EndIf
+Program.Sub.ADD_INITIAL_OPTS.End
+
+Program.Sub.DDL_XREF_OPT_Click.Start
+f.Intrinsic.Control.If(v.Global.bOptsExist)
+	f.Intrinsic.Control.If(v.Global.bInitialSetting.Not)
+		f.Intrinsic.UI.Msgbox("CHANGING THIS OPTION CAN HAVE SOME BIG RAMIFICATIONS, PROCEED WITH CAUTION","***Warning***")
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+Program.Sub.DDL_XREF_OPT_Click.End
+
+Program.Sub.DDL_FIELD_STORED_IN_Click.Start
+f.Intrinsic.Control.If(v.Global.bOptsExist)
+	f.Intrinsic.Control.If(v.Global.bInitialSetting.Not)
+		f.Intrinsic.UI.Msgbox("CHANGING THIS OPTION CAN HAVE SOME BIG RAMIFICATIONS, PROCEED WITH CAUTION","***Warning***")
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.EndIf
+Program.Sub.DDL_FIELD_STORED_IN_Click.End
+
+Program.Sub.DDL_FIELD_STORED_IN_Change.Start
+'CHANGING THIS OPTION IF WE HAVE ALREADY SET IT, CAN HAVE SOME BIG RAMIFICATIONS, PROCEED WITH CAUTION
+v.Global.bInitialSetting.Set(False)
+Program.Sub.DDL_FIELD_STORED_IN_Change.End
