@@ -1,0 +1,245 @@
+Program.Sub.ScreenSU.Start
+Gui.F_MAIN..Create
+Gui.F_MAIN..Caption("Work Order Picklist")
+Gui.F_MAIN..Size(6120,2310)
+Gui.F_MAIN..MinX(0)
+Gui.F_MAIN..MinY(0)
+Gui.F_MAIN..Position(0,0)
+Gui.F_MAIN..BackColor(-2147483633)
+Gui.F_MAIN..MousePointer(0)
+Gui.F_MAIN..Sizeable(False)
+Gui.F_MAIN..Event(UnLoad,F_MAIN_UnLoad)
+Gui.F_MAIN.txtJobBeg.Create(TextBox,"",True,1215,300,0,180,525,True,0,"Arial",8,-2147483643,1)
+Gui.F_MAIN.txtJobBeg.MaxLength(6)
+Gui.F_MAIN.txtJobBeg.TabStop(True)
+Gui.F_MAIN.txtJobBeg.TabIndex(1)
+Gui.F_MAIN.txtSuffixBeg.Create(TextBox,"",True,540,300,0,1530,525,True,0,"Arial",8,-2147483643,1)
+Gui.F_MAIN.txtSuffixBeg.Event(LostFocus,txtSuffixBeg_LostFocus)
+Gui.F_MAIN.txtSuffixBeg.MaxLength(3)
+Gui.F_MAIN.txtSuffixBeg.TabStop(True)
+Gui.F_MAIN.txtSuffixBeg.TabIndex(2)
+Gui.F_MAIN.txtJobEnd.Create(TextBox,"",True,1215,300,0,3210,540,True,0,"Arial",8,-2147483643,1)
+Gui.F_MAIN.txtJobEnd.MaxLength(6)
+Gui.F_MAIN.txtJobEnd.TabStop(True)
+Gui.F_MAIN.txtJobEnd.TabIndex(3)
+Gui.F_MAIN.txtSuffixEnd.Create(TextBox,"",True,540,300,0,4545,540,True,0,"Arial",8,-2147483643,1)
+Gui.F_MAIN.txtSuffixEnd.MaxLength(3)
+Gui.F_MAIN.txtSuffixEnd.TabStop(True)
+Gui.F_MAIN.txtSuffixEnd.TabIndex(4)
+Gui.F_MAIN.cmdBrowseBegin.Create(Button)
+Gui.F_MAIN.cmdBrowseBegin.Size(450,375)
+Gui.F_MAIN.cmdBrowseBegin.Position(2205,495)
+Gui.F_MAIN.cmdBrowseBegin.Caption("^")
+Gui.F_MAIN.cmdBrowseBegin.Event(Click,cmdBrowseBegin_Click)
+Gui.F_MAIN.cmdBrowseBegin.TabStop(True)
+Gui.F_MAIN.cmdBrowseBegin.TabIndex(6)
+Gui.F_MAIN.cmdBrowseEnd.Create(Button)
+Gui.F_MAIN.cmdBrowseEnd.Size(435,375)
+Gui.F_MAIN.cmdBrowseEnd.Position(5190,510)
+Gui.F_MAIN.cmdBrowseEnd.Caption("^")
+Gui.F_MAIN.cmdBrowseEnd.Event(Click,cmdBrowseEnd_Click)
+Gui.F_MAIN.cmdBrowseEnd.TabStop(True)
+Gui.F_MAIN.cmdBrowseEnd.TabIndex(7)
+Gui.F_MAIN.lbl1.Create(Label,"Beginning Work Order",True,1935,255,0,225,270,True,0,"Arial",8,-2147483633,0)
+Gui.F_MAIN.lbl2.Create(Label,"Ending Work Order",True,1935,255,0,3240,270,True,0,"Arial",8,-2147483633,0)
+Gui.F_MAIN.cmdPrint.Create(Button)
+Gui.F_MAIN.cmdPrint.Size(855,375)
+Gui.F_MAIN.cmdPrint.Position(4800,1275)
+Gui.F_MAIN.cmdPrint.Caption("Print")
+Gui.F_MAIN.cmdPrint.Event(Click,cmdPrint_Click)
+Gui.F_MAIN.cmdPrint.TabStop(True)
+Gui.F_MAIN.cmdPrint.TabIndex(5)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+Program.External.Include.Library("GCG_5708_GET_MATL_SEQ.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'coded by TCM for project 5708
+'custom picklist that groups by labor sequence
+'shows all material that is needed for each labor step based on the job range selected
+F.Intrinsic.UI.SetBrowserHotTypeAhead(True)
+f.Intrinsic.Control.CallSub(TableCreate)
+gui.F_MAIN..Visible(TRUE)
+Program.Sub.Main.End
+
+Program.Sub.cmdBrowseBegin_Click.Start
+v.Local.sReturn.Declare
+F.Intrinsic.UI.Browser(1000,"",V.Local.sReturn)
+
+f.Intrinsic.Control.If(v.Local.sReturn,<>,"***CANCEL***")
+	f.Intrinsic.String.Split(v.Local.sReturn,"*!*",v.Local.sReturn)
+	gui.F_MAIN.txtJobBeg.Text(v.Local.sReturn(0))
+	gui.F_MAIN.txtSuffixBeg.Text(v.Local.sReturn(1))
+	gui.F_MAIN.txtJobEnd.Text(v.Local.sReturn(0))
+	gui.F_MAIN.txtSuffixEnd.Text(v.Local.sReturn(1))
+f.Intrinsic.Control.EndIf
+Program.Sub.cmdBrowseBegin_Click.End
+
+Program.Sub.cmdPrint_Click.Start
+f.Intrinsic.Control.Try
+	V.Local.sSQL.Declare
+	v.Local.sJobStart.Declare
+	v.Local.sSuffixStart.Declare
+	v.Local.sJobEnd.Declare
+	v.Local.sSuffixEnd.Declare
+	v.Local.sReturn.Declare
+	v.Local.sJobSuffSequences.Declare
+	v.Local.iCount.Declare
+	v.Local.sSplit.Declare
+	
+	V.Local.sJobStart.Set(v.Screen.F_MAIN!txtJobBeg.Text)
+	V.Local.sSuffixStart.Set(v.Screen.F_MAIN!txtSuffixBeg.Text)
+	V.Local.sJobEnd.Set(v.Screen.F_MAIN!txtJobEnd.Text)
+	V.Local.sSuffixEnd.Set(v.Screen.F_MAIN!txtSuffixEnd.Text)
+	
+	f.Intrinsic.UI.InvokeWaitDialog("Building picklist components...","5708 Print Picklist")
+	'OPEN CONNECTION
+	F.ODBC.Connection!CONX.OpenCompanyConnection
+	
+	'CLEAR OUT OLD USER SPECIFIC RECORDS FROM BI TABLE
+	F.Intrinsic.Control.CallSub(ClearTableForUser)
+	
+	'BUILD QUERY TO GET LIST OF JOBS BASED ON SELECTION
+	F.Intrinsic.String.Build("SELECT JOB,SUFFIX,SEQ FROM V_JOB_OPERATIONS WHERE FLAG_CLOSED <> 'Y' AND LMO = 'L' AND ((JOB BETWEEN '{0}' AND '{1}') AND (SUFFIX BETWEEN '{2}' AND '{3}')) AND SEQ < '995000'",V.Local.sJobStart,V.Local.sJobEnd,V.Local.sSuffixStart,V.Local.sSuffixEnd,V.Local.sSQL)
+	F.ODBC.Connection!CONX.EXECUTEANDRETURN(V.Local.sSQL,V.Local.sReturn)
+	
+	f.Intrinsic.Control.If(v.Local.sReturn,<>,"")
+		'LOOP THROUGH LIST OF JOB/SUFFIX'S AND SPLIT INTO INDIVIDUAL SEQUENCES, 
+		'THEN LEVERAGE LIBRARY TO GET LIST OF MATERIAL TIED TO EACH SEQUENCE, 
+		'THEN WRITE THE RECORDS TO THE BI TABLE
+		F.Intrinsic.String.Split(V.Local.sReturn,"#$#",V.Local.sJobSuffSequences)
+		f.Intrinsic.Control.For(v.Local.iCount,0,v.Local.sJobSuffSequences.UBound,1)
+			f.Intrinsic.String.Split(v.Local.sJobSuffSequences(V.Local.iCount),"*!*",v.Local.sSplit)	
+			f.Intrinsic.Control.CallSub("GCG_5708_GET_MATL_SEQ","JOB",V.Local.sSplit(0),"SUFFIX",V.Local.sSplit(1),"SEQUENCE",V.Local.sSplit(2))
+			f.Intrinsic.Control.If(v.DataTable.GetMatlSeq.RowCount,>,0)
+				f.Intrinsic.Control.CallSub("WriteRecordsToBITable","Job",v.Local.sSplit(0),"Suffix",v.Local.sSplit(1),"LaborSequence",v.Local.sSplit(2))
+			f.Intrinsic.Control.EndIf
+		f.Intrinsic.Control.Next(v.Local.iCount)
+		
+		'PRINT REPORT
+		F.Intrinsic.Control.CallSub(PrintReport,"JOBSTART",V.Local.sJobStart,"SUFFIXSTART",V.Local.sSuffixStart,"JOBEND",V.Local.sJobEnd,"SUFFIXEND",V.Local.sSuffixEnd)
+		
+		'CLOSE OUT PROGRAM
+		F.Intrinsic.Control.CallSub(F_MAIN_Unload)
+	f.Intrinsic.Control.Else
+		f.Intrinsic.UI.CloseWaitDialog
+		f.Intrinsic.UI.Msgbox("No open labor sequences left.  Please choose another work order range.")
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.Catch
+	f.Intrinsic.Control.CallSub(ErrorMsg, CurrentSub, v.Ambient.CurrentSubroutine)
+f.Intrinsic.Control.Finally
+	f.Intrinsic.UI.CloseWaitDialog
+f.Intrinsic.Control.EndTry
+
+Program.Sub.cmdPrint_Click.End
+
+Program.Sub.txtSuffixBeg_LostFocus.Start
+'THIS WILL AUTO FILL OUT THE ENDING JOB/SUFFIX WHEN STARTING ONE LOSES FOCUS
+gui.F_MAIN.txtJobEnd.Text(v.Screen.F_MAIN!txtJobBeg.Text)
+gui.F_MAIN.txtSuffixEnd.Text(v.Screen.F_MAIN!txtSuffixBeg.Text)
+Program.Sub.txtSuffixBeg_LostFocus.End
+
+Program.Sub.cmdBrowseEnd_Click.Start
+v.Local.sReturn.Declare
+F.Intrinsic.UI.Browser(1000,"",V.Local.sReturn)
+
+f.Intrinsic.Control.If(v.Local.sReturn,<>,"***CANCEL***")
+	f.Intrinsic.String.Split(v.Local.sReturn,"*!*",v.Local.sReturn)
+	gui.F_MAIN.txtJobEnd.Text(v.Local.sReturn(0))
+	gui.F_MAIN.txtSuffixEnd.Text(v.Local.sReturn(1))
+f.Intrinsic.Control.EndIf
+Program.Sub.cmdBrowseEnd_Click.End
+
+Program.Sub.F_MAIN_UnLoad.Start
+F.Intrinsic.Control.End
+Program.Sub.F_MAIN_UnLoad.End
+
+Program.Sub.WriteRecordsToBITable.Start
+v.Local.sLaborSequence.Declare
+v.Local.sJob.Declare
+v.Local.sSuffix.Declare
+v.Local.sSQL.Declare
+
+v.Local.sJob.Set(v.Args.Job)
+v.Local.sSuffix.Set(v.Args.Suffix)
+v.Local.sLaborSequence.Set(v.Args.LaborSequence)
+
+'CREATE PICKLIST DT TO SAVE TO TABLE
+F.Data.DataView.Create("GetMatlSeq","dvGetMatlSeq",22)
+F.Data.DataView.ToDataTable("GetMatlSeq","dvGetMatlSeq","dtPicklistRecords")
+F.Data.DataView.Close("GetMatlSeq","dvGetMatlSeq")
+
+'remove unecessary columns
+F.Data.DataTable.RemoveColumn("dtPicklistRecords","ToBeRemoved")
+F.Data.DataTable.RemoveColumn("dtPicklistRecords","category")
+F.Data.DataTable.RemoveColumn("dtPicklistRecords","Seq")
+
+'add necessary columns
+f.Data.DataTable.AddColumn("dtPicklistRecords","JOB","String",v.Local.sJob)
+f.Data.DataTable.AddColumn("dtPicklistRecords","SUFFIX","String",v.Local.sSuffix)
+f.Data.DataTable.AddColumn("dtPicklistRecords","LABORSEQUENCE","String",v.Local.sLaborSequence)
+f.Data.DataTable.AddColumn("dtPicklistRecords","SEQUENCE","String","")
+F.Data.DataTable.AddColumn("dtPicklistRecords","USERNAME","String",V.Caller.User)
+
+'FILL WITH MATERIAL SEQUENCE NUMBER AND SAVE TO DB
+f.Intrinsic.String.Build("SELECT RTRIM(PART) AS PART, SEQ AS SEQUENCE FROM V_JOB_OPERATIONS WHERE JOB = '{0}' AND SUFFIX = '{1}';",V.Local.sJob,V.Local.sSuffix,V.Local.sSQL)
+F.Data.Dictionary.CreateFromSQL("dicMaterialSequence","CONX",V.Local.sSQL)
+F.Data.Dictionary.SetDefaultReturn("dicMaterialSequence","")
+F.Data.DataTable.FillFromDictionary("dtPicklistRecords","dicMaterialSequence","PART","SEQUENCE")
+F.Data.Dictionary.Close("dicMaterialSequence")
+F.Data.DataTable.SaveToDB("dtPicklistRecords","CONX","GCG_5708_PICKLIST","JOB*!*SUFFIX*!*SEQUENCE",128)
+F.Data.DataTable.Close("dtPicklistRecords")
+
+Program.Sub.WriteRecordsToBITable.End
+
+Program.Sub.TableCreate.Start
+v.Local.sSQL.Declare
+v.Local.bTableExists.Declare
+
+'MAKE SURE CUSTOM TABLE EXISTS, CREATE IF IT DOES NOT
+F.ODBC.Connection!CONY.OPENCOMPANYCONNECTION
+F.ODBC.Connection!CONY.TableExists("GCG_5708_PICKLIST",V.Local.bTableExists)
+
+'check if table exists
+F.Intrinsic.Control.If(V.Local.bTableExists,=,False)
+	v.Local.sSQL.Set("CREATE TABLE GCG_5708_PICKLIST( JOB CHAR(6) NOT NULL , SUFFIX CHAR(3) NOT NULL , LABORSEQUENCE CHAR(6) NOT NULL , SEQUENCE CHAR(6), PART CHAR(20), EST_QTY_PER FLOAT, UM_INVENTORY CHAR(2) , USERNAME CHAR(8) NOT NULL);")
+	F.ODBC.Connection!CONY.EXECUTE(V.Local.sSQL)
+F.Intrinsic.Control.EndIf
+
+'close connection
+F.ODBC.Connection!CONY.Close
+Program.Sub.TableCreate.End
+
+Program.Sub.ClearTableForUser.Start
+v.Local.sSQL.Declare
+
+'BUILD QUERY
+f.Intrinsic.String.Build("DELETE FROM GCG_5708_PICKLIST WHERE USERNAME = '{0}';",V.Caller.User,V.Local.sSQL)
+
+'CLEAR OUT RECORDS FOR THIS USER
+F.ODBC.Connection!CONY.OPENCOMPANYCONNECTION
+F.ODBC.Connection!CONY.EXECUTE(V.Local.sSQL)
+F.ODBC.Connection!CONY.Close
+
+Program.Sub.ClearTableForUser.End
+
+Program.Sub.PrintReport.Start
+V.Local.sParams.Declare
+v.Local.sValues.Declare
+V.Local.sRptLoc.Declare
+v.Local.iRptID.Declare
+
+'BUILD PARAMS/VALUES
+F.Intrinsic.String.Split("JOBSTART*!*SUFFIXSTART*!*JOBEND*!*SUFFIXEND*!*USERNAME","*!*",V.Local.sParams)
+F.Intrinsic.String.Build("{0}*!*{1}*!*{2}*!*{3}*!*{4}",v.Args.JOBSTART,V.Args.SUFFIXSTART,V.Args.JOBEND,V.Args.SUFFIXEND,V.Caller.User,V.Local.sValues)
+F.Intrinsic.String.Split(V.Local.sValues,"*!*",V.Local.sValues)
+
+'GET REPORT NAME AND INITIALIZE
+F.Intrinsic.String.Concat(V.Caller.BusintDir,"\Custom\GCG_5708_WO_PICKLIST.rpt",V.Local.srptLoc)
+F.Global.BI.InitializeReport("GCG 5708 WO PICKLIST",V.Local.srptLoc,V.Local.iRptId)
+
+'PRINT REPORT
+F.Global.BI.PrintReport(V.Local.iRptId,0,V.Local.sParams,V.Local.sValues,"",True)
+Program.Sub.PrintReport.End
